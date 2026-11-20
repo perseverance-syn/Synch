@@ -25,7 +25,7 @@ func TestRemoveThreadIgnoredFiles(t *testing.T) {
 	}
 	put(t, thread.Path(), filepath.Join("cache.ignored", "artifact.bin"), "output")
 
-	err := s.RemoveThread(t.Context(), thread)
+	err := s.RemoveThread(t.Context(), thread, Settled())
 	var refused *IgnoredFilesError
 	if !errors.As(err, &refused) || !errors.Is(err, ErrIgnoredFiles) ||
 		!slices.Equal(refused.Paths, []string{"cache.ignored/", "secrets.ignored"}) {
@@ -34,7 +34,7 @@ func TestRemoveThreadIgnoredFiles(t *testing.T) {
 	if got := get(t, thread.Path(), "secrets.ignored"); got != "kept" {
 		t.Fatal("refused removal changed the ignored file")
 	}
-	if err := s.RemoveThread(t.Context(), thread, DiscardIgnored()); err != nil {
+	if err := s.RemoveThread(t.Context(), thread, Settled(), DiscardIgnored()); err != nil {
 		t.Fatalf("remove with DiscardIgnored = %v", err)
 	}
 	if _, statErr := os.Stat(thread.Path()); !errors.Is(statErr, os.ErrNotExist) {

@@ -8,6 +8,8 @@ import (
 	"testing"
 )
 
+// --- Registration: record the pinned endpoints or refuse them ---
+
 // TestRegistrationRecordsRemoteURLs proves F2 and F1 registration: a shared
 // endpoint records equal pins, split endpoints record both URLs, and a
 // remote-less project registers with empty pins.
@@ -182,6 +184,8 @@ func TestSplitRemoteURLDriftRefused(t *testing.T) {
 		t.Fatalf("fetch URL main = %s, want the unchanged %s", got, base)
 	}
 }
+
+// --- Reconciliation: redirects refused, the recorded URLs carried ---
 
 // TestPinnedEndpointsRefuseRedirect proves AC1 (O1) cases (a) and (b): a URL
 // changed before the call refuses the fetch, and a pushurl changed between

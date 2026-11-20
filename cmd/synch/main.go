@@ -10,8 +10,22 @@ import (
 	"syscall"
 
 	"synch/internal/api"
+	"synch/internal/cli"
 	"synch/internal/daemon"
 )
+
+// run routes the runtime entry points to dispatch and every other command to the
+// operator CLI, which talks to the daemon over the local API.
+func run(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 {
+		switch args[0] {
+		case "daemon", "runner", "agent":
+		default:
+			return cli.Main(args, stdout, stderr, os.Getenv)
+		}
+	}
+	return dispatch(args, stderr)
+}
 
 // dispatch selects the runtime entry point and returns its process exit status.
 func dispatch(args []string, stderr io.Writer) int {
@@ -64,4 +78,4 @@ func runDaemon() error {
 }
 
 // main passes process arguments to the entry-point dispatcher.
-func main() { os.Exit(dispatch(os.Args[1:], os.Stderr)) }
+func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }

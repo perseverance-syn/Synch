@@ -5,7 +5,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -156,12 +158,17 @@ func (s *Service) ReconcileAndPush(ctx context.Context, t Thread, target RemoteT
 	if _, err := t.run(ctx, s, Status, key, "check-ref-format", ref); err != nil {
 		return result, fmt.Errorf("validate target branch: %w", err)
 	}
+	sandbox, cleanup, err := s.newTransportSandbox(ctx, t)
+	if err != nil {
+		return result, err
+	}
+	defer cleanup()
 	// The recorded URLs must still be the repository's config before anything
 	// touches the network.
 	if err := s.verifyPinnedEndpoint(ctx, t, target.Remote, key); err != nil {
 		return result, err
 	}
-	fetched, err := s.fetchTarget(ctx, t, ref)
+	fetched, err := s.fetchTarget(ctx, t, ref, sandbox)
 	if err != nil {
 		return result, err
 	}
@@ -187,7 +194,77 @@ func (s *Service) ReconcileAndPush(ctx context.Context, t Thread, target RemoteT
 	if err := s.verifyPinnedEndpoint(ctx, t, target.Remote, key); err != nil {
 		return result, err
 	}
-	return result, s.pushRevision(ctx, t, ref, result.Revision)
+	return result, s.pushRevision(ctx, t, ref, result.Revision, sandbox)
+}
+
+// --- Transport sandbox: config isolation for fetch and push ---
+
+// transportSandbox is the isolated configuration context for one
+// reconciliation's transport commands: a runner-owned git directory whose
+// config carries no URL rewriting members, with system and global config
+// disabled for the transport process and the repository's real object store
+// wired in through GIT_OBJECT_DIRECTORY.
+type transportSandbox struct {
+	dir          string
+	globalConfig string
+	objectsDir   string
+}
+
+// env returns the config-isolating environment for one transport process.
+func (t transportSandbox) env() []string {
+	return []string{
+		"GIT_CONFIG_NOSYSTEM=1",
+		"GIT_CONFIG_GLOBAL=" + t.globalConfig,
+		"GIT_DIR=" + t.dir,
+		"GIT_OBJECT_DIRECTORY=" + t.objectsDir,
+	}
+}
+
+// newTransportSandbox creates the sandbox for one reconciliation: a synthetic
+// bare git directory whose config is runner-owned and carries no insteadOf
+// members, an empty global config file, and paths pointing at the worktree's
+// real object store. The caller must run the returned cleanup exactly once.
+func (s *Service) newTransportSandbox(ctx context.Context, t Thread) (transportSandbox, func(), error) {
+	objects, err := t.run(ctx, s, Status, t.Branch(), "rev-parse", "--path-format=absolute", "--git-path", "objects")
+	if err != nil {
+		return transportSandbox{}, nil, err
+	}
+	dir, err := os.MkdirTemp("", "synch-transport-")
+	if err != nil {
+		return transportSandbox{}, nil, fmt.Errorf("create transport sandbox: %w", err)
+	}
+	cleanup := func() { _ = os.RemoveAll(dir) }
+	fail := func(err error) (transportSandbox, func(), error) {
+		cleanup()
+		return transportSandbox{}, nil, err
+	}
+	// Forward slashes keep the paths unambiguous for Git's own environment
+	// handling on every platform.
+	slash := func(path string) string { return filepath.ToSlash(path) }
+	sandbox := transportSandbox{
+		dir:          slash(dir),
+		globalConfig: slash(filepath.Join(dir, "global.gitconfig")),
+		objectsDir:   slash(strings.TrimSpace(line(objects))),
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "objects", "info"), 0700); err != nil {
+		return fail(fmt.Errorf("prepare transport sandbox: %w", err))
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "objects", "pack"), 0700); err != nil {
+		return fail(fmt.Errorf("prepare transport sandbox: %w", err))
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "refs", "heads"), 0700); err != nil {
+		return fail(fmt.Errorf("prepare transport sandbox: %w", err))
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config"), []byte("[core]\n\trepositoryformatversion = 0\n"), 0600); err != nil {
+		return fail(fmt.Errorf("write transport config: %w", err))
+	}
+	if err := os.WriteFile(filepath.Join(dir, "HEAD"), []byte("ref: refs/heads/main\n"), 0600); err != nil {
+		return fail(fmt.Errorf("write transport HEAD: %w", err))
+	}
+	if err := os.WriteFile(sandbox.globalConfig, nil, 0600); err != nil {
+		return fail(fmt.Errorf("write transport global config: %w", err))
+	}
+	return sandbox, cleanup, nil
 }
 
 // --- Remote dispatch: pin the fetched revision and use an explicit refspec ---
@@ -198,6 +275,19 @@ func (s *Service) ReconcileAndPush(ctx context.Context, t Thread, target RemoteT
 // before the fetch and again before the push, so no network call ever uses a
 // URL the operator did not pin at registration.
 func (s *Service) verifyPinnedEndpoint(ctx context.Context, t Thread, remote, key string) error {
+	// URL rewriting rules in the repository config are refused outright: the
+	// transport ignores them (isolated config), but the URL probes below
+	// resolve through them, so their presence would make the endpoint checks
+	// unreliable.
+	rewrite, err := t.run(ctx, s, Status, key, "config", "--local", "--get-regexp", "--", "^url\\..*\\.(insteadOf|pushInsteadOf)$")
+	if err != nil {
+		var exit *exec.ExitError
+		if !errors.As(err, &exit) || exit.ExitCode() != 1 {
+			return fmt.Errorf("%w: inspect %s URL rewriting rules: %w", ErrRemoteURLChanged, remote, err)
+		}
+	} else if rules := strings.TrimSpace(string(rewrite)); rules != "" {
+		return fmt.Errorf("%w: repository config carries URL rewriting rules: %s", ErrRemoteURLChanged, rules)
+	}
 	fetch, err := t.run(ctx, s, Status, key, "remote", "get-url", "--all", "--", remote)
 	if err != nil {
 		return fmt.Errorf("%w: resolve %s fetch URL: %w", ErrRemoteURLChanged, remote, err)
@@ -210,13 +300,18 @@ func (s *Service) verifyPinnedEndpoint(ctx context.Context, t Thread, remote, ke
 	if len(fetchURLs) != 1 || len(pushURLs) != 1 {
 		return fmt.Errorf("%w: remote %s must have exactly one fetch URL and one push URL", ErrRemoteURLChanged, remote)
 	}
+	// The live URLs resolve through the same endpoint resolution the recorded
+	// pins went through, so a relative URL in the config compares against the
+	// recorded absolute endpoint (J1) instead of failing the comparison.
+	currentFetch := resolveEndpoint(fetchURLs[0], t.project.Path)
+	currentPush := resolveEndpoint(pushURLs[0], t.project.Path)
 	// A registration that pinned one shared endpoint must keep seeing one
 	// shared endpoint; a split config contradicts at least one of the pins.
-	if t.project.FetchURL == t.project.PushURL && fetchURLs[0] != pushURLs[0] {
-		return fmt.Errorf("%w: git fetch and push must use the same single remote URL: %s (fetch), %s (push)", ErrRemoteURLChanged, fetchURLs[0], pushURLs[0])
+	if t.project.FetchURL == t.project.PushURL && currentFetch != currentPush {
+		return fmt.Errorf("%w: git fetch and push must use the same single remote URL: %s (fetch), %s (push)", ErrRemoteURLChanged, currentFetch, currentPush)
 	}
-	if fetchURLs[0] != t.project.FetchURL || pushURLs[0] != t.project.PushURL {
-		return fmt.Errorf("%w: %s now uses %s (fetch) and %s (push), registration pinned %s (fetch) and %s (push)", ErrRemoteURLChanged, remote, fetchURLs[0], pushURLs[0], t.project.FetchURL, t.project.PushURL)
+	if currentFetch != t.project.FetchURL || currentPush != t.project.PushURL {
+		return fmt.Errorf("%w: %s now uses %s (fetch) and %s (push), registration pinned %s (fetch) and %s (push)", ErrRemoteURLChanged, remote, currentFetch, currentPush, t.project.FetchURL, t.project.PushURL)
 	}
 	return nil
 }
@@ -234,10 +329,11 @@ func urlLines(out []byte) []string {
 
 // fetchTarget reads the fetched object ID from this fetch's porcelain output
 // so a separate Git invocation cannot substitute another FETCH_HEAD value.
-// It fetches the recorded fetch URL directly instead of the remote name, so
-// the config's current URL cannot choose the source.
-func (s *Service) fetchTarget(ctx context.Context, t Thread, ref string) (string, error) {
-	out, err := t.run(ctx, s, Fetch, t.project.FetchURL+":"+ref, "fetch", "--porcelain", "--no-tags", "--no-prune", "--no-prune-tags", "--no-recurse-submodules", "--no-auto-maintenance", "--refmap=", "--", t.project.FetchURL, ref)
+// It fetches the recorded fetch URL directly inside the transport sandbox, so
+// neither the config's current URL nor a URL rewriting rule can choose the
+// source.
+func (s *Service) fetchTarget(ctx context.Context, t Thread, ref string, sandbox transportSandbox) (string, error) {
+	out, err := s.runTransport(ctx, t.request(Fetch, t.project.FetchURL+":"+ref), sandbox, "fetch", "--porcelain", "--no-tags", "--no-prune", "--no-prune-tags", "--no-recurse-submodules", "--no-auto-maintenance", "--refmap=", "--", t.project.FetchURL, ref)
 	if err != nil {
 		return "", fmt.Errorf("fetch reconciliation target: %w", err)
 	}
@@ -292,10 +388,12 @@ func (s *Service) mergeFailure(ctx context.Context, t Thread, key string, cause 
 
 // pushRevision uses an explicit object ID so a moving local branch cannot
 // substitute a different revision after reconciliation or scanning. It pushes
-// to the recorded push URL directly instead of the remote name, so the
-// config's current URL cannot choose the destination and no configured push
-// refspec can override the explicit one.
-func (s *Service) pushRevision(ctx context.Context, t Thread, ref, revision string) error {
+// to the recorded push URL directly inside the transport sandbox, so neither
+// the config's current URL nor a URL rewriting rule can choose the
+// destination, and no configured push refspec can override the explicit one.
+// The request carries the worktree evidence, and with evidence enabled the
+// push is refused if HEAD moved after the outgoing revision was selected.
+func (s *Service) pushRevision(ctx context.Context, t Thread, ref, revision string, sandbox transportSandbox) error {
 	request, err := s.reconciliationRequest(ctx, t, Push, t.project.PushURL+":"+ref)
 	if err != nil {
 		return err
@@ -303,7 +401,7 @@ func (s *Service) pushRevision(ctx context.Context, t Thread, ref, revision stri
 	if s.evidence && request.Revision != revision {
 		return errors.New("thread HEAD changed after the outgoing revision was selected")
 	}
-	out, err := s.run(ctx, request, t.path, "push", "--porcelain", "--no-force", "--no-force-with-lease",
+	out, err := s.runTransport(ctx, request, sandbox, "push", "--porcelain", "--no-force", "--no-force-with-lease",
 		"--no-force-if-includes", "--no-mirror", "--no-prune", "--no-follow-tags", "--recurse-submodules=no", "--", t.project.PushURL, revision+":"+ref)
 	if err != nil && !errors.Is(err, ErrDenied) {
 		return &PushError{Report: strings.TrimSpace(string(out)), Cause: err}

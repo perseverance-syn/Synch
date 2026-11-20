@@ -155,7 +155,7 @@ func TestRegistrationAndOwnership(t *testing.T) {
 		t.Fatal(err)
 	}
 	put(t, first.Path(), "dirty", "preserve")
-	if err := s.RemoveThread(t.Context(), opened); err == nil {
+	if err := s.RemoveThread(t.Context(), opened, Settled()); err == nil {
 		t.Fatal("dirty worktree was removed")
 	}
 	if err := os.Remove(filepath.Join(first.Path(), "dirty")); err != nil {
@@ -165,16 +165,16 @@ func TestRegistrationAndOwnership(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.RemoveThread(t.Context(), opened); !errors.Is(err, ErrWorktreeOwnership) {
+	if err := s.RemoveThread(t.Context(), opened, Settled()); !errors.Is(err, ErrWorktreeOwnership) {
 		t.Fatalf("remove worktree containing an ignored linked worktree = %v", err)
 	}
 	if got := get(t, nested.Path(), sharedFile); got != f.content {
 		t.Fatal("nested thread's worktree changed")
 	}
-	if err := s.RemoveThread(t.Context(), nested); err != nil {
+	if err := s.RemoveThread(t.Context(), nested, Settled()); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.RemoveThread(t.Context(), opened); err != nil {
+	if err := s.RemoveThread(t.Context(), opened, Settled()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(first.Path()); !errors.Is(err, os.ErrNotExist) {

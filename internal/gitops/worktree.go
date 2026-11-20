@@ -12,6 +12,8 @@ import (
 	"strings"
 )
 
+// --- Project and thread handles: registration metadata and identity ---
+
 // Project is registration metadata that the daemon can persist. FetchURL and
 // PushURL are the origin endpoints pinned at registration; every mediated
 // fetch and push uses them directly instead of the remote's current config.
@@ -114,9 +116,38 @@ func (s *Service) Register(ctx context.Context, path, baseBranch, conventions st
 	}
 	project := Project{Path: root, BaseBranch: baseBranch, Conventions: filepath.Clean(conventions)}
 	if len(fetchURLs) == 1 {
-		project.FetchURL, project.PushURL = fetchURLs[0], pushURLs[0]
+		project.FetchURL = resolveEndpoint(fetchURLs[0], root)
+		project.PushURL = resolveEndpoint(pushURLs[0], root)
 	}
 	return project, nil
+}
+
+// resolveEndpoint resolves a remote URL for pinning. Network URLs (any
+// scheme:// form: https, ssh, git, file) are recorded verbatim; local paths —
+// relative or absolute — are resolved against the repository root, cleaned,
+// and symlink-resolved where the path exists, so the recorded endpoint is
+// absolute and cannot depend on the working directory of the process that
+// later uses it.
+func resolveEndpoint(url, root string) string {
+	if strings.Contains(url, "://") || isSCPLike(url) {
+		return url
+	}
+	absolute := url
+	if !filepath.IsAbs(absolute) {
+		absolute = filepath.Join(root, absolute)
+	}
+	if resolved, err := filepath.EvalSymlinks(absolute); err == nil {
+		absolute = resolved
+	}
+	return filepath.Clean(absolute)
+}
+
+// isSCPLike reports Git's scp-style network syntax (user@host:path): a colon
+// before any slash. A single letter before the colon is a Windows drive, which
+// is a local path.
+func isSCPLike(url string) bool {
+	colon := strings.IndexByte(url, ':')
+	return colon > 1 && !strings.ContainsAny(url[:colon], "/\\")
 }
 
 // normalize resolves filesystem aliases before comparing or mediating paths.
@@ -217,6 +248,15 @@ type RemoveOption func(*removeOptions)
 // removeOptions holds the relaxations that RemoveThread received.
 type removeOptions struct {
 	discardIgnored bool
+	settled        bool
+}
+
+// Settled is the RemoveThread option attesting that the thread's processes
+// are stopped (execdriver Settle returned true): no writer outside the
+// mediation can create files in the worktree while the removal runs. Without
+// it, RemoveThread refuses with ErrNotSettled before touching anything.
+func Settled() RemoveOption {
+	return func(o *removeOptions) { o.settled = true }
 }
 
 // DiscardIgnored lets RemoveThread delete ignored files together with the
@@ -226,10 +266,16 @@ func DiscardIgnored() RemoveOption {
 	return func(o *removeOptions) { o.discardIgnored = true }
 }
 
-// RemoveThread removes only the verified thread worktree. Git refuses dirty
-// or locked worktrees, and this refuses to delete ignored files unless the
-// caller passes DiscardIgnored. The branch stays available for recovery and
-// review.
+// RemoveThread removes only the verified thread worktree. It requires the
+// Settled attestation: the caller confirms the thread's processes are stopped
+// (execdriver Settle returned true), so no writer outside the mediation can
+// create files in the worktree while the removal runs; without it, the
+// removal refuses with ErrNotSettled before touching anything. Git refuses
+// dirty or locked worktrees, and this refuses to delete ignored files unless
+// the caller passes DiscardIgnored. The scan and the removal run in one step
+// under the service lock; writers outside the mediation are excluded by the
+// Settled precondition, not detected. The branch stays available for recovery
+// and review.
 func (s *Service) RemoveThread(ctx context.Context, t Thread, options ...RemoveOption) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -237,6 +283,9 @@ func (s *Service) RemoveThread(ctx context.Context, t Thread, options ...RemoveO
 	var opts removeOptions
 	for _, option := range options {
 		option(&opts)
+	}
+	if !opts.settled {
+		return fmt.Errorf("%w: the caller must attest the thread's processes are stopped (Settled())", ErrNotSettled)
 	}
 	if err := s.checkThread(ctx, t, true); err != nil {
 		return err
@@ -248,7 +297,18 @@ func (s *Service) RemoveThread(ctx context.Context, t Thread, options ...RemoveO
 			return err
 		}
 	}
-	_, err := s.run(ctx, t.request(DeleteWorktree, t.Branch()), t.project.Path, "worktree", "remove", "--", t.path)
+	// The removal re-checks the ignored set after the deletion is authorized
+	// and immediately before git runs: a mediated writer (the decider) can
+	// create ignored files between the listing above and this point. Writers
+	// outside the mediation are the caller's responsibility: the daemon must
+	// have settled the thread's processes before removing.
+	guard := func() error {
+		if opts.discardIgnored {
+			return nil
+		}
+		return s.checkIgnoredFiles(ctx, t)
+	}
+	_, err := s.runWithGuard(ctx, t.request(DeleteWorktree, t.Branch()), t.project.Path, guard, "worktree", "remove", "--", t.path)
 	return err
 }
 

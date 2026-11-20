@@ -11,6 +11,8 @@ import (
 	"sync"
 )
 
+// --- Requests, errors and authorization ---
+
 // Action is an exact name from policy rule-file §7.
 type Action string
 
@@ -78,6 +80,7 @@ var (
 	ErrRemoteURLChanged  = errors.New("git remote URL changed since registration")
 	ErrNoPinnedRemote    = errors.New("project has no pinned remote")
 	ErrIgnoredFiles      = errors.New("worktree contains ignored files")
+	ErrNotSettled        = errors.New("thread removal requires the Settled attestation")
 )
 
 // DeniedError carries the rejected policy request without running the command.
@@ -120,12 +123,46 @@ func (s *Service) authorize(ctx context.Context, request Request) error {
 	return nil
 }
 
-// run is the only Git execution path. Its callers construct fixed command
-// lines and attach the corresponding policy request.
+// --- Command execution ---
+
+// run is the only Git execution path for non-transport commands. Its callers
+// construct fixed command lines and attach the corresponding policy request.
 func (s *Service) run(ctx context.Context, request Request, dir string, args ...string) ([]byte, error) {
+	return s.runWithGuard(ctx, request, dir, nil, args...)
+}
+
+// runWithGuard authorizes the command, runs guard, and only then executes it.
+// The guard closes the window between a pre-execution check (such as the
+// ignored-file listing of a removal) and the command for writers that mediate
+// through the decider, because the decider has already run when the guard
+// fires.
+func (s *Service) runWithGuard(ctx context.Context, request Request, dir string, guard func() error, args ...string) ([]byte, error) {
 	if err := s.authorize(ctx, request); err != nil {
 		return nil, err
 	}
+	if guard != nil {
+		if err := guard(); err != nil {
+			return nil, err
+		}
+	}
+	return s.execute(ctx, request, dir, nil, args...)
+}
+
+// runTransport executes one transport command (fetch or push) inside the
+// transport sandbox: the process reads the sandbox's config instead of the
+// repository's, so URL rewriting rules cannot redirect the recorded URLs.
+func (s *Service) runTransport(ctx context.Context, request Request, sandbox transportSandbox, args ...string) ([]byte, error) {
+	if err := s.authorize(ctx, request); err != nil {
+		return nil, err
+	}
+	return s.execute(ctx, request, sandbox.dir, sandbox.env(), args...)
+}
+
+// execute builds and runs one git command. extraEnv entries are appended after
+// the filtered parent environment, and every GIT_* variable from the parent is
+// filtered out, so the transport's config isolation cannot be overridden by
+// the daemon's own environment.
+func (s *Service) execute(ctx context.Context, request Request, dir string, extraEnv []string, args ...string) ([]byte, error) {
 	options := []string{"--no-optional-locks", "-c", "core.fsmonitor=false", "-C", dir}
 	if request.Action == Merge {
 		options = append(options, "-c", "rerere.enabled=false", "-c", "merge.autoStash=false")
@@ -140,6 +177,7 @@ func (s *Service) run(ctx context.Context, request Request, dir string, args ...
 		}
 	}
 	cmd.Env = append(cmd.Env, "LC_ALL=C", "GIT_TERMINAL_PROMPT=0")
+	cmd.Env = append(cmd.Env, extraEnv...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
