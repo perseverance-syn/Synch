@@ -12,12 +12,18 @@ import (
 	"time"
 
 	"synch/internal/api"
+	"synch/internal/credentials"
 	"synch/internal/daemon"
 	"synch/internal/engine"
+	"synch/internal/eventlog"
+	"synch/internal/evidence"
 )
 
 // startDaemon starts a real isolated daemon on a loopback port.
-func startDaemon(t *testing.T) (*daemon.Daemon, string, string) {
+func startDaemon(t *testing.T) (*daemon.Daemon, string, string) { return startDaemonWithBroker(t, nil) }
+
+// startDaemonWithBroker injects the broker used for scenario redaction.
+func startDaemonWithBroker(t *testing.T, broker *credentials.Broker) (*daemon.Daemon, string, string) {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -30,7 +36,7 @@ func startDaemon(t *testing.T) (*daemon.Daemon, string, string) {
 	dir := t.TempDir()
 	tokens := api.NewMemoryTokens()
 	tokens.Set("scenario-token", "operator:scenario")
-	d, err := daemon.New(daemon.Config{DataDir: dir, Listen: addr, Tokens: tokens, Adapters: []func(engine.Sink) (engine.EngineAdapter, error){}})
+	d, err := daemon.New(daemon.Config{DataDir: dir, Listen: addr, Tokens: tokens, Credentials: broker, Adapters: []func(engine.Sink) (engine.EngineAdapter, error){}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,22 +86,43 @@ func apiCall(t *testing.T, method, url, body, requestID string) []byte {
 	return raw
 }
 
-// TestKnownSecretsStayOutOfPromptsJournalsAndExports records the known S6 failure until card 401 fixes it.
+// TestKnownSecretsStayOutOfPromptsJournalsAndExports exercises broker redaction for retained output and export.
 func TestKnownSecretsStayOutOfPromptsJournalsAndExports(t *testing.T) {
-	d, _, dir := startDaemon(t)
 	const secret = "scenario-secret-401-plant"
+	red := credentials.NewRedactor()
+	if err := red.Add(secret); err != nil {
+		t.Fatal(err)
+	}
+	broker := credentials.NewBroker(nil, red)
+	d, _, dir := startDaemonWithBroker(t, broker)
 	excerpt, err := d.CapOutput(strings.NewReader(secret))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(excerpt.Text, secret) {
-		t.Fatal("card 401 changed the known leak: update S6 to assert redaction")
-	}
 	raw, err := os.ReadFile(filepath.Join(dir, "outputs", excerpt.Ref+".out"))
-	if err != nil || !strings.Contains(string(raw), secret) {
-		t.Fatalf("card 401 changed retained output: %v", err)
+	if err != nil {
+		t.Fatal(err)
 	}
-	t.Log("FAILED: retained output and excerpts keep planted secrets: no public way to supply known secrets for redaction; fix belongs to card 401 credentials/broker")
+	if strings.Contains(excerpt.Text, secret) || strings.Contains(string(raw), secret) {
+		t.Fatal("secret in retained output or excerpt")
+	}
+	bundle := filepath.Join(t.TempDir(), "bundle")
+	events := []eventlog.Event{{NewEvent: eventlog.NewEvent{Type: "finding.recorded", Payload: []byte(`{"text":"` + secret + `"}`)}}}
+	if err := evidence.Export(bundle, "scenario", events, broker.Redactor()); err != nil {
+		t.Fatal(err)
+	}
+	if err := filepath.WalkDir(bundle, func(path string, entry os.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		b, err := os.ReadFile(path)
+		if err == nil && strings.Contains(string(b), secret) {
+			t.Errorf("secret in %s", path)
+		}
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // TestReleaseEvidence runs each scenario and reports the observed outcome.
@@ -111,7 +138,7 @@ func TestReleaseEvidence(t *testing.T) {
 		{"S3", TestPlantedMissingRequirementIsVisible, "partial", "local gate verified; daemon requirement presentation not exercised"},
 		{"S4", TestStaleApprovalRefusedAfterRevisionOrTargetChange, "partial", "policy fixture verified; daemon path not exercised"},
 		{"S5", TestModeSwitchWithActiveChildAndRunningProcess, "partial", "existing daemon fixture uses private setup and inspection helpers"},
-		{"S6", TestKnownSecretsStayOutOfPromptsJournalsAndExports, "failed", "retained output and excerpts keep planted secrets: no public way to supply known secrets for redaction; fix belongs to card 401 credentials/broker"},
+		{"S6", TestKnownSecretsStayOutOfPromptsJournalsAndExports, "partial", "broker redaction verified for retained output, excerpts and export; prompt and journal paths not exercised by this scenario"},
 		{"S7", TestLostSnapshotResponseOnEveryDriver, "partial", "provider fixtures passed; real host deferred by owner"},
 		{"S8", TestOwnedRunnerContinuesAndReplaysAfterDisconnect, "partial", "engine launchers require the Direct driver"},
 		{"S9", TestFailedStaticCIGateThroughFixRerunAuditAndAcceptance, "partial", "local gate rerun verified; CI mocks, audit and human acceptance not exercised"},

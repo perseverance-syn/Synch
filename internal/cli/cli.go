@@ -78,6 +78,8 @@ func Main(args []string, stdout, stderr io.Writer, env func(string) string) int 
 		return runGrants(g, env, out, rest[1:])
 	case "receipt":
 		return runReceipt(g, env, out, rest[1:])
+	case "evidence":
+		return runEvidence(g, env, out, rest[1:])
 	case "events":
 		return runEvents(g, env, out, rest[1:])
 	case "setup":
@@ -149,6 +151,7 @@ Commands:
   grants create THREAD-ID --host H --identity I   grant Full Control
   grants revoke GRANT-ID                     revoke a grant (no body)
   receipt REQUEST-ID                         look up one of your receipts
+  evidence export THREAD-ID --out PATH       export journal evidence
   events page STREAM [--after N] [--limit N] page persisted events
   events follow STREAM [--until N]           follow the live SSE stream
   setup [--config PATH] [--server URL] [--token-file PATH]   write the config file and check the daemon
