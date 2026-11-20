@@ -56,6 +56,8 @@ type Config struct {
 	// Remote registers the remote execution driver when set.
 	Remote *RemoteConfig
 	// Sandbox registers a sandbox driver with tested filesystem, credential and network boundaries.
+	// Use a *sandbox.Driver after its Qualify call: only configurations whose boundary checks
+	// passed are advertised, and with none advertised the mode switch refuses Sandbox.
 	Sandbox SandboxDriver
 	// ChildMaxRuntime is the daemon-wide longest a managed child's engine session may
 	// run, as a Go duration (default 2h); "0" or "off" disables the budget. A project's
@@ -294,7 +296,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	port := fmt.Sprint(listener.Addr().(*net.TCPAddr).Port)
 	server := api.New(api.Config{
 		Store: d.store, Threads: d.threads, Tokens: d.tokens, Policy: d.policy, Port: port, WaitingFor: d.waitingFor,
-		DiskPressure: d.pressure.Load, ChangeMode: d.prepareMode,
+		DiskPressure: d.pressure.Load, ChangeMode: d.prepareMode, EvidenceRedactor: d.creds.Redactor(), ExecutionDrivers: d.executionDrivers,
 	}).HTTPServer()
 	httpCtx, stopHTTP := context.WithCancel(context.Background())
 	server.BaseContext = func(net.Listener) context.Context { return httpCtx }

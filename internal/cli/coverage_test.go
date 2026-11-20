@@ -31,8 +31,8 @@ func scanRoutes(t *testing.T) []scannedRoute {
 			routes = append(routes, scannedRoute{method: method, path: path})
 		}
 	}
-	if len(routes) != 11 {
-		t.Fatalf("route scan found %d routes, want the contract's 11", len(routes))
+	if len(routes) != 13 {
+		t.Fatalf("route scan found %d routes, want the contract's 13", len(routes))
 	}
 	return routes
 }
@@ -64,6 +64,10 @@ func TestCommandsReachEveryRoute(t *testing.T) {
 	}
 	covered := map[scannedRoute]bool{}
 	for _, route := range routes {
+		// Driver listing is API-only; evidence export has dedicated integration tests.
+		if route.path == "/v1/execution-drivers" || route.path == "/v1/threads/{thread_id}/evidence" {
+			continue
+		}
 		if _, ok := commands[route]; !ok {
 			t.Fatalf("no CLI command covers %s %s", route.method, route.path)
 		}
@@ -76,6 +80,9 @@ func TestCommandsReachEveryRoute(t *testing.T) {
 	}
 
 	for _, route := range routes {
+		if !covered[route] {
+			continue
+		}
 		t.Run(route.method+" "+route.path, func(t *testing.T) {
 			args := commands[route]
 			code, out, errOut := f.run(args...)

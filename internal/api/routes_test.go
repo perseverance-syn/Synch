@@ -76,7 +76,7 @@ func TestOpenAPIRoutes(t *testing.T) {
 		switch entry.operation {
 		case "streamEvents":
 			expected = http.StatusConflict
-		case "getThread", "getReceipt":
+		case "getThread", "getReceipt", "getEvidence":
 			expected = http.StatusNotFound
 		}
 		if entry.method == http.MethodPost {

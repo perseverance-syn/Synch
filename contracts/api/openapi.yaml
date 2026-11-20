@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Synch local API
-  version: 3.0.0
+  version: 3.1.0
   summary: Loopback HTTP commands and SSE event stream shared by desktop and CLI.
   description: |
     Sources: spec "Persistent state", "Command semantics", "Release surface"; decisions 16, 22.
@@ -33,6 +33,33 @@ tags:
     description: Daemon health
 
 paths:
+  /v1/execution-drivers:
+    get:
+      tags: [system]
+      operationId: listExecutionDrivers
+      summary: List registered execution drivers and their boundaries
+      responses:
+        '200':
+          description: Registered drivers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [drivers]
+                properties:
+                  drivers:
+                    type: array
+                    items:
+                      type: object
+                      required: [kind, description, status, evidence_integrity, certified_configs]
+                      properties:
+                        kind: { type: string }
+                        description: { type: string }
+                        status: { type: string }
+                        evidence_integrity: { type: string }
+                        certified_configs: { type: array, items: { type: string } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /v1/health:
     get:
       tags: [system]
@@ -100,6 +127,27 @@ paths:
               schema: { $ref: '#/components/schemas/Thread' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/Problem' }
+
+  /v1/threads/{thread_id}/evidence:
+    get:
+      tags: [threads]
+      operationId: getEvidence
+      summary: Export a redacted evidence bundle
+      parameters:
+        - $ref: '#/components/parameters/ThreadId'
+      responses:
+        '200':
+          description: ZIP evidence bundle
+          headers:
+            Synch-Manifest-Digest:
+              description: SHA-256 digest of manifest.json
+              schema: { $ref: '#/components/schemas/Sha256' }
+          content:
+            application/zip:
+              schema: { type: string, contentEncoding: binary }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '500': { $ref: '#/components/responses/Problem' }
 
   /v1/threads/{thread_id}/commands:
     post:
@@ -414,6 +462,7 @@ components:
           enum: [direct, remote, sandbox]
           description: direct is displayed as "Host access"
         audit_status: { type: string, enum: [off, pending, running, pass, corrections_requested, error] }
+        waiting_for: { type: string, description: Read-only reason a queued thread is waiting on the operator. }
         last_seq: { type: integer, minimum: 0 }
 
     CreateThread:

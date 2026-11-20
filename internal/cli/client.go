@@ -41,12 +41,13 @@ type problem struct {
 // response is one completed HTTP exchange. Receipt headers are kept for the
 // mutating commands; problem is set when the server answered problem+json.
 type response struct {
-	status      int
-	body        []byte
-	contentType string
-	receiptID   string
-	replayed    string
-	problem     *problem
+	status         int
+	body           []byte
+	contentType    string
+	receiptID      string
+	replayed       string
+	manifestDigest string
+	problem        *problem
 }
 
 // client calls the local API with the caller's bearer credential.
@@ -127,7 +128,7 @@ func (c *client) exchange(ctx context.Context, method, path string, body []byte,
 		return nil, fmt.Errorf("%w: read response: %v", errUnreachable, err)
 	}
 	out := &response{status: resp.StatusCode, body: data, contentType: resp.Header.Get("Content-Type"),
-		receiptID: resp.Header.Get("Synch-Receipt-Id"), replayed: resp.Header.Get("Synch-Receipt-Replayed")}
+		receiptID: resp.Header.Get("Synch-Receipt-Id"), replayed: resp.Header.Get("Synch-Receipt-Replayed"), manifestDigest: resp.Header.Get("Synch-Manifest-Digest")}
 	if strings.HasPrefix(out.contentType, "application/problem+json") {
 		var p problem
 		if json.Unmarshal(data, &p) == nil && p.Code != "" {

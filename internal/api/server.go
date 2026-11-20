@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"synch/internal/credentials"
 	"synch/internal/eventlog"
 	"synch/internal/policy"
 	"synch/internal/thread"
@@ -19,7 +20,7 @@ import (
 
 const (
 	DefaultPort = "7420"
-	apiVersion  = "3.0.0"
+	apiVersion  = "3.1.0"
 
 	// DefaultMaxBodyBytes bounds mutating HTTP request bodies to 1 MiB.
 	DefaultMaxBodyBytes = 1 << 20
@@ -27,10 +28,12 @@ const (
 
 // Config supplies the daemon's shared store, thread machine, and deferred policy integrations.
 type Config struct {
-	Store     *eventlog.Store
-	Threads   *thread.Machine
-	Tokens    TokenVerifier
-	Authority Authority
+	ExecutionDrivers func() []ExecutionDriver
+	EvidenceRedactor *credentials.Redactor
+	Store            *eventlog.Store
+	Threads          *thread.Machine
+	Tokens           TokenVerifier
+	Authority        Authority
 	// Policy prepares authority changes before opening the receipt writer.
 	// It takes precedence over Authority on the policy endpoints.
 	Policy       *policy.Engine
@@ -126,9 +129,11 @@ type route struct {
 
 var routes = []route{
 	{"GET", "/v1/health", "getHealth"},
+	{"GET", "/v1/execution-drivers", "listExecutionDrivers"},
 	{"GET", "/v1/threads", "listThreads"},
 	{"POST", "/v1/threads", "createThread"},
 	{"GET", "/v1/threads/{thread_id}", "getThread"},
+	{"GET", "/v1/threads/{thread_id}/evidence", "getEvidence"},
 	{"POST", "/v1/threads/{thread_id}/commands", "sendThreadCommand"},
 	{"POST", "/v1/threads/{thread_id}/approvals", "createApproval"},
 	{"POST", "/v1/threads/{thread_id}/grants", "createGrant"},
@@ -215,6 +220,12 @@ func (s *Server) serveRoute(w http.ResponseWriter, r *http.Request, caller strin
 		return
 	}
 	switch entry.operation {
+	case "listExecutionDrivers":
+		drivers := []ExecutionDriver{}
+		if s.config.ExecutionDrivers != nil {
+			drivers = s.config.ExecutionDrivers()
+		}
+		writeJSON(w, map[string]any{"drivers": drivers})
 	case "getHealth":
 		s.health(w)
 	case "listThreads":
@@ -229,6 +240,8 @@ func (s *Server) serveRoute(w http.ResponseWriter, r *http.Request, caller strin
 			return
 		}
 		s.getThread(w, r, params["thread_id"])
+	case "getEvidence":
+		s.getEvidence(w, r, params["thread_id"])
 	case "getReceipt":
 		s.getReceipt(w, r, caller, params["request_id"])
 	case "streamEvents", "pageEvents":
