@@ -1,0 +1,460 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://synch.local/contracts/policy/rule-file/3.0.0",
+ "title": "Synch policy rule file v3.0.0",
+ "description": "Spec 'Policy and credentials', 'Full Control and mode changes', 'Extension points', 'Operational proposals'; decisions 05, 13, 14, 20. Semantics in rule-file.md. The 'source' field is checked against the loader-derived source (rule-file.md section 2); it is never trusted on its own. grants/approvals/revocations are the export/fixture form of API-issued records and never confer authority when loaded from a file (rule-file.md section 3).",
+ "type": "object",
+ "additionalProperties": false,
+ "required": [
+  "policy_version",
+  "source",
+  "rules"
+ ],
+ "properties": {
+  "policy_version": {
+   "const": 3
+  },
+  "id": {
+   "type": "string"
+  },
+  "source": {
+   "enum": [
+    "operator",
+    "project",
+    "role",
+    "skill"
+   ]
+  },
+  "description": {
+   "type": "string"
+  },
+  "rules": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/rule"
+   }
+  },
+  "grants": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/grant"
+   }
+  },
+  "revocations": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/revocation"
+   }
+  },
+  "approvals": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/approval"
+   }
+  }
+ },
+ "allOf": [
+  {
+   "if": {
+    "properties": {
+     "source": {
+      "enum": [
+       "role",
+       "skill",
+       "project"
+      ]
+     }
+    },
+    "required": [
+     "source"
+    ]
+   },
+   "then": {
+    "properties": {
+     "rules": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "effect": {
+         "enum": [
+          "deny",
+          "ask"
+         ]
+        }
+       }
+      }
+     },
+     "grants": {
+      "type": "array",
+      "maxItems": 0
+     },
+     "revocations": {
+      "type": "array",
+      "maxItems": 0
+     },
+     "approvals": {
+      "type": "array",
+      "maxItems": 0
+     }
+    }
+   }
+  }
+ ],
+ "$defs": {
+  "ulid": {
+   "type": "string",
+   "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+  },
+  "sha256": {
+   "type": "string",
+   "pattern": "^sha256:[0-9a-f]{64}$"
+  },
+  "git_revision": {
+   "type": "string",
+   "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$",
+   "description": "Full SHA-1 or SHA-256 commit ID."
+  },
+  "action_pattern": {
+   "type": "string",
+   "description": "Rule matcher: action name, or a glob whose last segment is '*'. Vocabulary in rule-file.md section 7.",
+   "pattern": "^(\\*|[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*(\\.\\*)?)$"
+  },
+  "action": {
+   "type": "string",
+   "description": "Exact action name. No wildcards (approvals list explicit actions).",
+   "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$"
+  },
+  "rule": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "id",
+    "effect",
+    "actions"
+   ],
+   "properties": {
+    "id": {
+     "type": "string",
+     "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "effect": {
+     "enum": [
+      "allow",
+      "deny",
+      "ask"
+     ]
+    },
+    "actions": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "$ref": "#/$defs/action_pattern"
+     }
+    },
+    "match": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "paths": {
+       "type": "array",
+       "items": {
+        "type": "string",
+        "minLength": 1
+       },
+       "description": "Globs. '@mediated' = every Synch-managed working copy of the thread."
+      },
+      "targets": {
+       "type": "array",
+       "items": {
+        "type": "string",
+        "minLength": 1
+       }
+      },
+      "hosts": {
+       "type": "array",
+       "items": {
+        "type": "string",
+        "minLength": 1
+       }
+      },
+      "roles": {
+       "type": "array",
+       "items": {
+        "enum": [
+         "coordinator",
+         "builder",
+         "ops",
+         "security",
+         "auditor"
+        ]
+       }
+      },
+      "modes": {
+       "type": "array",
+       "items": {
+        "enum": [
+         "sandbox",
+         "provider",
+         "full_control"
+        ]
+       }
+      },
+      "args": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      }
+     }
+    },
+    "approval": {
+     "type": "object",
+     "additionalProperties": false,
+     "description": "Required for effect=ask. All matching ask rules from all sources apply together at use time (rule-file.md section 5.3).",
+     "required": [
+      "max_ttl"
+     ],
+     "properties": {
+      "max_ttl": {
+       "$ref": "#/$defs/iso_duration"
+      }
+     }
+    },
+    "reason": {
+     "type": "string"
+    }
+   },
+   "if": {
+    "properties": {
+     "effect": {
+      "const": "ask"
+     }
+    },
+    "required": [
+     "effect"
+    ]
+   },
+   "then": {
+    "required": [
+     "approval"
+    ]
+   },
+   "else": {
+    "not": {
+     "required": [
+      "approval"
+     ]
+    }
+   }
+  },
+  "grant": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "id",
+    "kind",
+    "thread",
+    "host",
+    "identity",
+    "granted_by",
+    "granted_at",
+    "inherit"
+   ],
+   "properties": {
+    "id": {
+     "type": "string",
+     "minLength": 1
+    },
+    "kind": {
+     "const": "full_control"
+    },
+    "thread": {
+     "$ref": "#/$defs/ulid"
+    },
+    "host": {
+     "type": "string",
+     "minLength": 1
+    },
+    "identity": {
+     "type": "string",
+     "minLength": 1,
+     "description": "Host account the native access runs under."
+    },
+    "granted_by": {
+     "type": "string",
+     "minLength": 1,
+     "description": "Authenticated operator caller identity that issued the grant via the API."
+    },
+    "granted_at": {
+     "type": "string",
+     "format": "date-time"
+    },
+    "inherit": {
+     "const": true,
+     "description": "dec. 14: children inherit on the same host and identity."
+    }
+   }
+  },
+  "revocation": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "grant",
+    "scope",
+    "revoked_by",
+    "revoked_at"
+   ],
+   "properties": {
+    "grant": {
+     "type": "string",
+     "minLength": 1
+    },
+    "scope": {
+     "const": "subtree",
+     "description": "dec. 14: always the whole inheriting subtree."
+    },
+    "revoked_by": {
+     "type": "string",
+     "minLength": 1
+    },
+    "revoked_at": {
+     "type": "string",
+     "format": "date-time"
+    }
+   }
+  },
+  "approval": {
+   "type": "object",
+   "additionalProperties": false,
+   "description": "Durable bounded approval record (dec. 20). Same shape in approval.recorded events and exports. Operational actions (firewall, network, production) must bind the reviewed plan digest, never only a revision.",
+   "required": [
+    "id",
+    "approver",
+    "thread",
+    "worktree_digest",
+    "target",
+    "actions",
+    "approved_at",
+    "expires_at"
+   ],
+   "oneOf": [
+    {
+     "required": [
+      "revision"
+     ]
+    },
+    {
+     "required": [
+      "plan_digest"
+     ]
+    }
+   ],
+   "properties": {
+    "id": {
+     "type": "string",
+     "minLength": 1
+    },
+    "approver": {
+     "type": "string",
+     "minLength": 1,
+     "description": "Authenticated operator caller identity."
+    },
+    "thread": {
+     "$ref": "#/$defs/ulid"
+    },
+    "revision": {
+     "$ref": "#/$defs/git_revision"
+    },
+    "plan_digest": {
+     "$ref": "#/$defs/sha256"
+    },
+    "worktree_digest": {
+     "$ref": "#/$defs/sha256",
+     "description": "Digest of the thread working copy relative to its revision at approval time (rule-file.md section 5.2). Detects uncommitted changes an unchanged commit SHA cannot."
+    },
+    "target": {
+     "type": "string",
+     "minLength": 1
+    },
+    "actions": {
+     "type": "array",
+     "minItems": 1,
+     "uniqueItems": true,
+     "items": {
+      "$ref": "#/$defs/action"
+     }
+    },
+    "approved_at": {
+     "type": "string",
+     "format": "date-time"
+    },
+    "expires_at": {
+     "type": "string",
+     "format": "date-time"
+    },
+    "rollback": {
+     "type": "string",
+     "minLength": 1,
+     "description": "Rollback command or verified checkpoint ref."
+    },
+    "irreversible_effects": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "minLength": 1
+     },
+     "description": "External effects rollback cannot undo. Empty array = operator states there are none."
+    },
+    "constraint_rules": {
+     "type": "array",
+     "items": {
+      "$ref": "#/$defs/qualified_rule_id"
+     },
+     "description": "Informational: qualified ids of every matching ask rule and built-in gate at creation. Use-time checks recompute them from current policy."
+    }
+   },
+   "if": {
+    "properties": {
+     "actions": {
+      "contains": {
+       "$ref": "#/$defs/operational_action"
+      }
+     }
+    },
+    "required": [
+     "actions"
+    ]
+   },
+   "then": {
+    "required": [
+     "plan_digest",
+     "rollback",
+     "irreversible_effects"
+    ],
+    "not": {
+     "required": [
+      "revision"
+     ]
+    }
+   }
+  },
+  "iso_duration": {
+   "type": "string",
+   "pattern": "^P(?!$)([0-9]+D)?(T(?=[0-9])([0-9]+H)?([0-9]+M)?([0-9]+S)?)?$",
+   "description": "Strict ISO 8601 duration (days, hours, minutes, seconds; each unit at most once, in order)."
+  },
+  "qualified_rule_id": {
+   "type": "string",
+   "pattern": "^(operator|project|role|skill|builtin):[^# ]+#[a-z0-9][a-z0-9._-]*$",
+   "description": "<source>:<loader-derived origin id>#<rule id> (rule-file.md section 2)."
+  },
+  "operational_action": {
+   "enum": [
+    "net.firewall_change",
+    "net.network_change",
+    "deploy.production"
+   ]
+  }
+ }
+}

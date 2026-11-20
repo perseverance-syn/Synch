@@ -1,0 +1,13 @@
+{
+  "envelope_version": 2,
+  "id": "01JD3QA0000000000000000002",
+  "stream": "thread:01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+  "seq": 43,
+  "global_seq": 1018,
+  "type": "check.result",
+  "type_version": 1,
+  "recorded_at": "2026-11-18T10:16:00Z",
+  "actor": { "kind": "daemon", "id": "synchd", "machine": "build-01" },
+  "thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+  "payload": { "check": "go-test", "status": "not_run", "reason": "runner disconnected", "revision": "5977ec186c62ce66b2e1e48051bda521bb7f6b9f" }
+}

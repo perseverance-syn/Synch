@@ -1,0 +1,46 @@
+{
+  "policy_version": 3,
+  "id": "example.ask-firewall-plan-digest",
+  "source": "operator",
+  "description": "AC7(b): a firewall change requires a human approval bound to the exact plan digest, worktree digest, target, explicit actions and expiry, with rollback and irreversible effects stated (dec. 20, Operational proposals). The approvals section is the export form of an API-issued record.",
+  "rules": [
+    {
+      "id": "net.firewall.ask",
+      "effect": "ask",
+      "actions": [
+        "net.firewall_change"
+      ],
+      "match": {
+        "targets": [
+          "fw-edge-01"
+        ]
+      },
+      "approval": {
+        "max_ttl": "PT4H"
+      },
+      "reason": "Firewall changes need bounded operator approval."
+    }
+  ],
+  "approvals": [
+    {
+      "id": "apr-0001",
+      "approver": "operator:alice",
+      "thread": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+      "plan_digest": "sha256:3b7f1c0e9d8a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c",
+      "worktree_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "target": "fw-edge-01",
+      "actions": [
+        "net.firewall_change"
+      ],
+      "approved_at": "2026-11-18T10:00:00Z",
+      "expires_at": "2026-11-18T14:00:00Z",
+      "rollback": "synch-checkpoint:fw-edge-01/2026-11-18T09-55Z (verified)",
+      "irreversible_effects": [
+        "Established connections dropped during reload are not restored by rollback."
+      ],
+      "constraint_rules": [
+        "operator:store#net.firewall.ask"
+      ]
+    }
+  ]
+}

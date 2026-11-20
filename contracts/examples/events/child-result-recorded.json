@@ -1,0 +1,48 @@
+{
+  "envelope_version": 2,
+  "id": "01JD3QA0000000000000000004",
+  "stream": "thread:01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+  "seq": 45,
+  "global_seq": 1145,
+  "type": "child.result_recorded",
+  "type_version": 1,
+  "recorded_at": "2026-11-18T10:20:00Z",
+  "actor": {
+    "kind": "daemon",
+    "id": "synchd"
+  },
+  "thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+  "payload": {
+    "child_thread_id": "01JD3QB0000000000000000001",
+    "assignment_id": "01JD3QB0000000000000000002",
+    "outcome": "completed",
+    "revision": "5977ec186c62ce66b2e1e48051bda521bb7f6b9f",
+    "checks": {
+      "passed": [
+        {
+          "check": "go-test"
+        }
+      ],
+      "failed": [],
+      "error": [],
+      "partial": [
+        {
+          "check": "lint",
+          "reason": "only internal/sched linted"
+        }
+      ],
+      "not_run": [
+        {
+          "check": "race",
+          "reason": "runner has no cgo toolchain"
+        }
+      ]
+    },
+    "limitations": [
+      "lint covered one package"
+    ],
+    "open_requirements": [
+      "run race tests on a cgo runner"
+    ]
+  }
+}

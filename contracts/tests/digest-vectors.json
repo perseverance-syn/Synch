@@ -1,0 +1,219 @@
+{
+ "description": "Receipt admission and payload-digest vectors (receipts.md sections 2-3). body_text is the raw HTTP body as UTF-8 text; body_hex is raw bytes; body_absent means no body. Verified by contracts/check.mjs.",
+ "vectors": [
+  {
+   "name": "reorder-a",
+   "method": "POST",
+   "route": "/v1/threads",
+   "body_text": "{\"project_id\":\"p1\",\"brief\":\"Fix CI\"}",
+   "expect": {
+    "digest": "sha256:89242a142a3c69cebbe2f28bf31cf7adcc97db62f1c1d3bbe0c9a2173e725883"
+   }
+  },
+  {
+   "name": "reorder-b",
+   "method": "POST",
+   "route": "/v1/threads",
+   "body_text": "{ \"brief\" : \"Fix CI\",\n \"project_id\":\"p1\" }",
+   "expect": {
+    "digest": "sha256:89242a142a3c69cebbe2f28bf31cf7adcc97db62f1c1d3bbe0c9a2173e725883"
+   },
+   "same_as": "reorder-a"
+  },
+  {
+   "name": "unicode-nfc",
+   "method": "POST",
+   "route": "/v1/threads",
+   "body_text": "{\"project_id\":\"p1\",\"brief\":\"caf\\u00e9\"}",
+   "expect": {
+    "digest": "sha256:6b08c58d5996c0b5fdda4bdf55d5e36b67d04916cfc727e26faa6e26f744c943"
+   }
+  },
+  {
+   "name": "unicode-nfc-raw",
+   "method": "POST",
+   "route": "/v1/threads",
+   "body_text": "{\"project_id\":\"p1\",\"brief\":\"café\"}",
+   "expect": {
+    "digest": "sha256:6b08c58d5996c0b5fdda4bdf55d5e36b67d04916cfc727e26faa6e26f744c943"
+   },
+   "same_as": "unicode-nfc"
+  },
+  {
+   "name": "unicode-nfd",
+   "method": "POST",
+   "route": "/v1/threads",
+   "body_text": "{\"project_id\":\"p1\",\"brief\":\"cafe\\u0301\"}",
+   "expect": {
+    "digest": "sha256:874b5dc30ad5a68288a863b6b4cf1ef54567f84e07eb1d5f84b240302e39c402"
+   },
+   "differs_from": "unicode-nfc"
+  },
+  {
+   "name": "unicode-lone-surrogate",
+   "method": "POST",
+   "route": "/v1/threads",
+   "body_text": "{\"project_id\":\"p1\",\"brief\":\"\\ud800\"}",
+   "expect": {
+    "reject": "invalid_unicode"
+   }
+  },
+  {
+   "name": "invalid-utf8",
+   "method": "POST",
+   "route": "/v1/threads",
+   "body_hex": "7b226272696566223a22ff227d",
+   "expect": {
+    "reject": "invalid_utf8"
+   }
+  },
+  {
+   "name": "number-integer",
+   "method": "POST",
+   "route": "/v1/threads",
+   "body_text": "{\"project_id\":\"p1\",\"brief\":\"x\",\"n\":1}",
+   "expect": {
+    "digest": "sha256:e81c30ee17c32fd51778cf83d76fb1ee0c9137fdcd162030c4963e477fcfc351"
+   }
+  },
+  {
+   "name": "number-fraction-form",
+   "method": "POST",
+   "route": "/v1/threads",
+   "body_text": "{\"project_id\":\"p1\",\"brief\":\"x\",\"n\":1.0}",
+   "expect": {
+    "reject": "number_not_integer"
+   }
+  },
+  {
+   "name": "number-exponent-form",
+   "method": "POST",
+   "route": "/v1/threads",
+   "body_text": "{\"project_id\":\"p1\",\"brief\":\"x\",\"n\":1e0}",
+   "expect": {
+    "reject": "number_not_integer"
+   }
+  },
+  {
+   "name": "number-negative-zero",
+   "method": "POST",
+   "route": "/v1/threads",
+   "body_text": "{\"project_id\":\"p1\",\"brief\":\"x\",\"n\":-0}",
+   "expect": {
+    "reject": "number_not_integer"
+   }
+  },
+  {
+   "name": "number-out-of-range",
+   "method": "POST",
+   "route": "/v1/threads",
+   "body_text": "{\"project_id\":\"p1\",\"brief\":\"x\",\"n\":9007199254740993}",
+   "expect": {
+    "reject": "number_out_of_range"
+   }
+  },
+  {
+   "name": "duplicate-member",
+   "method": "POST",
+   "route": "/v1/threads",
+   "body_text": "{\"brief\":\"a\",\"brief\":\"b\",\"project_id\":\"p1\"}",
+   "expect": {
+    "reject": "duplicate_member"
+   }
+  },
+  {
+   "name": "member-explicit-null",
+   "method": "POST",
+   "route": "/v1/threads",
+   "body_text": "{\"project_id\":\"p1\",\"brief\":\"Fix CI\",\"pin\":null}",
+   "expect": {
+    "digest": "sha256:a3f8deec74ea9fbf7cf8cf6455042cc0c5e10ac39a2e57b887ee458328741512"
+   },
+   "differs_from": "reorder-a"
+  },
+  {
+   "name": "body-null-on-object-route",
+   "method": "POST",
+   "route": "/v1/threads",
+   "body_text": "null",
+   "expect": {
+    "reject": "body_must_be_object"
+   }
+  },
+  {
+   "name": "body-absent-on-object-route",
+   "method": "POST",
+   "route": "/v1/threads",
+   "body_absent": true,
+   "expect": {
+    "reject": "body_must_be_object"
+   }
+  },
+  {
+   "name": "revoke-body-absent",
+   "method": "POST",
+   "route": "/v1/grants/{grant_id}/revoke",
+   "path_params": {
+    "grant_id": "grt-0001"
+   },
+   "body_absent": true,
+   "expect": {
+    "digest": "sha256:f8401190f80118955f1a6a895802e14245135fa5456d5d7765e8660deb503211"
+   }
+  },
+  {
+   "name": "revoke-body-null",
+   "method": "POST",
+   "route": "/v1/grants/{grant_id}/revoke",
+   "path_params": {
+    "grant_id": "grt-0001"
+   },
+   "body_text": "null",
+   "expect": {
+    "reject": "body_not_allowed"
+   }
+  },
+  {
+   "name": "revoke-other-grant",
+   "method": "POST",
+   "route": "/v1/grants/{grant_id}/revoke",
+   "path_params": {
+    "grant_id": "grt-0002"
+   },
+   "body_absent": true,
+   "expect": {
+    "digest": "sha256:d89efe1a557594910365c263e8667b00415be7fa0a636d7b7ffe87218c76abd5"
+   },
+   "differs_from": "revoke-body-absent"
+  },
+  {
+   "name": "member-proto",
+   "method": "POST",
+   "route": "/v1/threads",
+   "body_text": "{\"project_id\":\"p1\",\"brief\":\"Fix CI\",\"__proto__\":{}}",
+   "expect": {
+    "digest": "sha256:64ff5a8c56b7fca81bd919f35b0a235c3338819fa8e47559921a0300831cd5ba"
+   },
+   "differs_from": "reorder-a"
+  },
+  {
+   "name": "member-constructor",
+   "method": "POST",
+   "route": "/v1/threads",
+   "body_text": "{\"project_id\":\"p1\",\"brief\":\"Fix CI\",\"constructor\":1}",
+   "expect": {
+    "digest": "sha256:6ec448c1d35a7bd0dc379ca46429cd103875c3df59df2447bc2a8e0b812aec13"
+   },
+   "differs_from": "reorder-a"
+  },
+  {
+   "name": "member-proto-duplicate",
+   "method": "POST",
+   "route": "/v1/threads",
+   "body_text": "{\"__proto__\":1,\"__proto__\":2,\"project_id\":\"p1\",\"brief\":\"x\"}",
+   "expect": {
+    "reject": "duplicate_member"
+   }
+  }
+ ]
+}

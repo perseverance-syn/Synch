@@ -1,0 +1,42 @@
+{
+  "policy_version": 3,
+  "id": "example.deny-destructive-git",
+  "source": "operator",
+  "description": "AC7(a): deny destructive Git operations on mediated paths (spec 'Project and Git').",
+  "rules": [
+    {
+      "id": "git.destructive.deny",
+      "effect": "deny",
+      "actions": [
+        "git.push_force",
+        "git.reset_hard",
+        "git.clean",
+        "git.branch_delete",
+        "git.history_rewrite",
+        "git.checkout_discard"
+      ],
+      "match": {
+        "paths": [
+          "@mediated"
+        ]
+      },
+      "reason": "Destructive Git operations on Synch-managed working copies are denied."
+    },
+    {
+      "id": "git.routine.allow",
+      "effect": "allow",
+      "actions": [
+        "git.status",
+        "git.diff",
+        "git.commit",
+        "git.fetch",
+        "git.push"
+      ],
+      "match": {
+        "paths": [
+          "@mediated"
+        ]
+      }
+    }
+  ]
+}

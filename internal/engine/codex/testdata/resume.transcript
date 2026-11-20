@@ -1,0 +1,7 @@
+> {"method":"initialize","id":1,"params":{"clientInfo":{"name":"synch","title":"Synch","version":"0.1.0"}}}
+< {"id":1,"result":{"userAgent":"synch/0.169.0","platformFamily":"unix","platformOs":"linux"}}
+> {"method":"initialized","params":{}}
+> {"method":"thread/resume","id":2,"params":{"threadId":"thr_saved","cwd":"/workspace","model":"example-model","excludeTurns":true}}
+< {"id":2,"result":{"thread":{"id":"thr_saved"}}}
+> {"method":"thread/unsubscribe","id":3,"params":{"threadId":"thr_saved"}}
+< {"id":3,"result":{"status":"unsubscribed"}}

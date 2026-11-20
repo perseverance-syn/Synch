@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://synch.local/contracts/drivers/finding/2.0.0",
+  "title": "Normalized scanner finding v2.0.0",
+  "description": "Spec 'Findings and fixes': normalize tool/version, rule, severity, component, location and evidence; group duplicates while retaining provenance. Fingerprint rule: scanner-driver.md section 4.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["finding_version", "id", "fingerprint", "tool", "rule", "severity", "component", "location", "evidence", "revision", "provenance"],
+  "properties": {
+    "finding_version": { "const": 2 },
+    "id": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" },
+    "fingerprint": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "tool": {
+      "type": "object", "additionalProperties": false, "required": ["name", "version", "binary_sha256"],
+      "properties": { "name": { "enum": ["trivy", "gitleaks"] }, "version": { "type": "string", "minLength": 1 }, "binary_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }, "db_version": { "type": "string" } }
+    },
+    "rule": {
+      "type": "object", "additionalProperties": false, "required": ["id"],
+      "properties": { "id": { "type": "string", "minLength": 1 }, "title": { "type": "string" }, "url": { "type": "string" } }
+    },
+    "severity": { "enum": ["critical", "high", "medium", "low", "info", "unknown"] },
+    "native_severity": { "type": "string" },
+    "component": {
+      "type": "object", "additionalProperties": false, "required": ["type", "name"],
+      "description": "Gitleaks: type=secret, name=the rule id (scanner-driver.md section 4).",
+      "properties": { "type": { "enum": ["package", "image", "file", "config", "secret", "commit"] }, "name": { "type": "string", "minLength": 1 }, "version": { "type": "string" }, "purl": { "type": "string" }, "fixed_version": { "type": "string" } }
+    },
+    "location": {
+      "type": "object", "additionalProperties": false, "required": ["path"],
+      "properties": { "path": { "type": "string", "minLength": 1 }, "start_line": { "type": "integer", "minimum": 1 }, "end_line": { "type": "integer", "minimum": 1 }, "commit": { "type": "string" }, "image_layer": { "type": "string" } }
+    },
+    "evidence": {
+      "type": "object", "additionalProperties": false, "required": ["summary", "report"],
+      "properties": {
+        "summary": { "type": "string", "minLength": 1 },
+        "snippet_redacted": { "type": "string", "description": "Already redacted before any write (scanner-driver.md section 3)." },
+        "report": { "$ref": "#/$defs/report_ref" }
+      }
+    },
+    "revision": { "type": "string", "minLength": 1 },
+    "provenance": {
+      "type": "array", "minItems": 1,
+      "items": { "type": "object", "additionalProperties": false, "required": ["scan_id", "tool", "report"],
+        "properties": { "scan_id": { "type": "string", "minLength": 1 }, "tool": { "type": "string", "minLength": 1 }, "report": { "$ref": "#/$defs/report_ref" }, "native_id": { "type": "string" } } }
+    },
+    "triage": {
+      "type": "object", "additionalProperties": false, "required": ["status"],
+      "properties": { "status": { "enum": ["open", "confirmed", "false_positive", "accepted_risk", "fixed"] }, "reason": { "type": "string", "minLength": 1 }, "by": { "type": "string" }, "at": { "type": "string", "format": "date-time" } },
+      "if": { "properties": { "status": { "enum": ["false_positive", "accepted_risk"] } }, "required": ["status"] }, "then": { "required": ["reason", "by"] }
+    }
+  },
+  "$defs": {
+    "report_ref": {
+      "type": "object", "additionalProperties": false, "required": ["uri", "digest", "redacted"],
+      "description": "Retained report. digest = sha256 of the retained (redacted) bytes. Unredacted tool output is never retained.",
+      "properties": {
+        "uri": { "type": "string", "minLength": 1 },
+        "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "redacted": { "const": true }
+      }
+    }
+  }
+}

@@ -1,0 +1,588 @@
+openapi: 3.1.0
+info:
+  title: Synch local API
+  version: 3.0.0
+  summary: Loopback HTTP commands and SSE event stream shared by desktop and CLI.
+  description: |
+    Sources: spec "Persistent state", "Command semantics", "Release surface"; decisions 16, 22.
+    - Listens on loopback only (127.0.0.1 / ::1). Remote clients tunnel over SSH (dec. 16).
+    - Every call needs a caller-specific bearer token. Desktop and CLI use the same API (dec. 22).
+    - Mutating calls follow contracts/receipts.md 3.0.0: processing order, body admission, payload digest, replay and stored rejections.
+      Responses that have a receipt carry `Synch-Receipt-Id` and `Synch-Receipt-Replayed`. Pre-receipt errors, `409 request_id_conflict` and 5xx carry neither.
+    - Errors are RFC 9457 problem+json with a stable `code`.
+    - SSE replay, gap, overflow and resync rules are on streamEvents.
+    - Scope: this API covers the card-000 surface only. Setup, project registration and other operator workflows are owned by later cards (README.md "Coverage boundary").
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Synch
+servers:
+  - url: http://127.0.0.1:7420
+    description: Default loopback (port is configurable; Q-06)
+security:
+  - callerToken: []
+tags:
+  - name: threads
+    description: Thread lifecycle and commands
+  - name: authority
+    description: Approvals, grants and revocations
+  - name: receipts
+    description: Idempotent request receipts
+  - name: events
+    description: Event log and live stream
+  - name: system
+    description: Daemon health
+
+paths:
+  /v1/health:
+    get:
+      tags: [system]
+      operationId: getHealth
+      summary: Daemon health, disk pressure, log epoch and head sequence
+      responses:
+        '200':
+          description: Healthy or degraded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/threads:
+    get:
+      tags: [threads]
+      operationId: listThreads
+      summary: List threads
+      parameters:
+        - { name: project_id, in: query, schema: { type: string } }
+        - { name: state, in: query, schema: { $ref: '#/components/schemas/ThreadState' } }
+      responses:
+        '200':
+          description: Threads
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [threads]
+                properties:
+                  threads: { type: array, items: { $ref: '#/components/schemas/Thread' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [threads]
+      operationId: createThread
+      summary: Submit a task (creates the root coordinator thread; Q-30)
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateThread' }
+      responses:
+        '201': { $ref: '#/components/responses/Accepted201' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+        '500': { $ref: '#/components/responses/Problem' }
+
+  /v1/threads/{thread_id}:
+    get:
+      tags: [threads]
+      operationId: getThread
+      summary: Get a thread
+      parameters:
+        - $ref: '#/components/parameters/ThreadId'
+      responses:
+        '200':
+          description: Thread
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Thread' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /v1/threads/{thread_id}/commands:
+    post:
+      tags: [threads]
+      operationId: sendThreadCommand
+      summary: Send a command to a thread
+      description: Control and recovery commands are accepted in every state and during disk pressure ("Supervision and failure").
+      parameters:
+        - $ref: '#/components/parameters/ThreadId'
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ThreadCommand' }
+      responses:
+        '202': { $ref: '#/components/responses/Accepted202' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+        '500': { $ref: '#/components/responses/Problem' }
+
+  /v1/threads/{thread_id}/approvals:
+    post:
+      tags: [authority]
+      operationId: createApproval
+      summary: Record a bounded approval (dec. 20; policy/rule-file.md section 5)
+      description: The daemon sets `id`, `approver` (caller identity), `thread` (path), `approved_at` and `constraint_rules`. It rejects the approval if no ask rule or built-in gate covers the actions and target, or if `expires_at - approved_at` exceeds the strictest TTL among all of them (policy/rule-file.md section 5). Firewall, network and production actions must bind `plan_digest`; a revision-only approval for them is rejected.
+      parameters:
+        - $ref: '#/components/parameters/ThreadId'
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateApproval' }
+      responses:
+        '201': { $ref: '#/components/responses/Accepted201' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '500': { $ref: '#/components/responses/Problem' }
+
+  /v1/threads/{thread_id}/grants:
+    post:
+      tags: [authority]
+      operationId: createGrant
+      summary: Grant Full Control on one host and identity (dec. 14)
+      parameters:
+        - $ref: '#/components/parameters/ThreadId'
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [host, identity]
+              properties:
+                host: { type: string, minLength: 1 }
+                identity: { type: string, minLength: 1 }
+      responses:
+        '201': { $ref: '#/components/responses/Accepted201' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '500': { $ref: '#/components/responses/Problem' }
+
+  /v1/grants/{grant_id}/revoke:
+    post:
+      tags: [authority]
+      operationId: revokeGrant
+      summary: Revoke a grant across the inheriting subtree
+      description: Takes **no body**; any body returns `400 malformed_body` (`body_not_allowed`). The receipt confirms acceptance. Completion is `grant.revoked` with `settled=true` on the event stream.
+      parameters:
+        - name: grant_id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1 }
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '202': { $ref: '#/components/responses/Accepted202' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '500': { $ref: '#/components/responses/Problem' }
+
+  /v1/receipts/{request_id}:
+    get:
+      tags: [receipts]
+      operationId: getReceipt
+      summary: Look up the caller's receipt for a request ID
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/RequestIdValue' }
+      responses:
+        '200':
+          description: Receipt (accepted or rejected)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Receipt' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /v1/streams/{stream}/events:
+    get:
+      tags: [events]
+      operationId: streamEvents
+      summary: Live event stream (SSE) with replay
+      description: |
+        Source: "Persistent state" (clients reconnect from the last sequence they received).
+        - `stream` is `system`, `thread:<ulid>`, or `all`. The cursor is `global_seq` for `all`, otherwise `seq`.
+        - The first frame is `event: hello` with `data: {"log_epoch": "<ulid>", "head": <cursor>}`. Every event frame has `id: <cursor>`, `event: <type>` and `data: <one JSON event>` (events/catalogue.schema.json 2.0.0).
+        - **Resume.** The client sends `Last-Event-ID` (or `after`; the header wins) = its **last contiguous received cursor** L: the highest cursor such that it has received and processed every cursor 1..L. The server replays every persisted event with cursor > L in order, then switches to live delivery with no gap and no duplicate. `after` omitted = 0 (full history).
+        - **Gaps.** Cursors are contiguous. A client that receives cursor != L+1 discards that frame, closes, and reconnects with L. The server only sends persisted events, so it never skips.
+        - **Overflow.** If a slow client's buffer overflows, the server sends `event: overflow` (no cursor in data) and closes. The client reconnects with its own L. The server never tells the client where to resume.
+        - **Epoch and resync.** `log_epoch` identifies one event-log lineage. It changes only when the store is restored from a backup or re-created. A client keeps `(log_epoch, L)` per stream. If the hello `log_epoch` differs from the stored one, or the server answers `409 cursor_ahead` (L > head), the client must **resync**: drop all state derived from that stream, then rebuild from cursor 0 through `pageEvents` (or a fresh stream with `after=0`) up to `head`, and only then continue live. A client never just sets L = head, because that would silently skip events.
+        - Heartbeat: an SSE comment line every 15 s (Q-08).
+        - Clients ignore events of unknown type (README.md "Compatibility"), but those events still advance L.
+      parameters:
+        - $ref: '#/components/parameters/Stream'
+        - name: Last-Event-ID
+          in: header
+          required: false
+          schema: { type: string, pattern: '^[0-9]+$' }
+        - name: after
+          in: query
+          required: false
+          schema: { type: integer, minimum: 0 }
+      responses:
+        '200':
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: SSE frames (hello, events, overflow, heartbeat comments).
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /v1/streams/{stream}/events/page:
+    get:
+      tags: [events]
+      operationId: pageEvents
+      summary: Page events as JSON (gap fill, resync, CLI)
+      parameters:
+        - $ref: '#/components/parameters/Stream'
+        - name: after
+          in: query
+          required: false
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 200 }
+      responses:
+        '200':
+          description: Contiguous page of events starting at after+1
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events, head, log_epoch]
+                properties:
+                  events:
+                    type: array
+                    items: { $ref: '#/components/schemas/Event' }
+                  head: { type: integer, minimum: 0, description: Current head cursor of the stream }
+                  log_epoch: { $ref: '#/components/schemas/Ulid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+components:
+  securitySchemes:
+    callerToken:
+      type: http
+      scheme: bearer
+      description: Caller-specific token, issued per client and identity, stored in the OS keychain. Receipts are keyed by the identity behind the token.
+
+  parameters:
+    RequestId:
+      name: Synch-Request-Id
+      in: header
+      required: true
+      schema: { $ref: '#/components/schemas/RequestIdValue' }
+    ThreadId:
+      name: thread_id
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Ulid' }
+    Stream:
+      name: stream
+      in: path
+      required: true
+      schema: { type: string, pattern: '^(all|system|thread:[0-9A-HJKMNP-TV-Z]{26})$' }
+
+  headers:
+    ReceiptId:
+      description: Receipt of this request. Present on every response that has a receipt (first or replayed, accepted or rejected).
+      schema: { $ref: '#/components/schemas/Ulid' }
+    Replayed:
+      description: false on the first response, true when the stored response is replayed for a retry.
+      schema: { type: boolean }
+
+  responses:
+    Accepted201:
+      description: Accepted. The receipt is the acceptance outcome.
+      headers:
+        Synch-Receipt-Id: { $ref: '#/components/headers/ReceiptId' }
+        Synch-Receipt-Replayed: { $ref: '#/components/headers/Replayed' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Receipt' }
+    Accepted202:
+      description: Accepted (acceptance only; delivery and execution follow as events).
+      headers:
+        Synch-Receipt-Id: { $ref: '#/components/headers/ReceiptId' }
+        Synch-Receipt-Replayed: { $ref: '#/components/headers/Replayed' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Receipt' }
+    Problem:
+      description: |
+        Error. Stored rejections (receipts.md section 5) carry `Synch-Receipt-Id`, `Synch-Receipt-Replayed` and `receipt_id` in the body.
+        Pre-receipt errors (`unauthorized`, `request_id_required`, `request_id_invalid`, `malformed_body`), `request_id_conflict` and 5xx carry no receipt headers.
+      headers:
+        Synch-Receipt-Id: { $ref: '#/components/headers/ReceiptId' }
+        Synch-Receipt-Replayed: { $ref: '#/components/headers/Replayed' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unauthorized:
+      description: Missing or invalid caller token (pre-receipt; no receipt headers)
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+    Ulid: { type: string, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' }
+    Sha256: { type: string, pattern: '^sha256:[0-9a-f]{64}$' }
+    GitRevision: { type: string, pattern: '^[0-9a-f]{40}([0-9a-f]{24})?$' }
+    Action:
+      type: string
+      pattern: '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$'
+      description: Exact action name from policy/rule-file.md section 7. No wildcards.
+    RequestIdValue: { type: string, pattern: '^[A-Za-z0-9._:-]{1,128}$' }
+    ThreadState:
+      type: string
+      enum: [draft, plan_review, queued, running, waiting_children, awaiting_decision, paused, rollover, verifying, awaiting_acceptance, completed, failed, cancelled]
+    PauseReason:
+      type: string
+      enum: [operator, harness_unavailable, no_eligible_pair, disk_pressure, reconciliation, disagreement, mode_switch, runner_disconnected, daemon_recovery]
+
+    Event:
+      description: One persisted event. Full schema in contracts/events/catalogue.schema.json 2.0.0.
+      type: object
+      required: [envelope_version, id, stream, seq, global_seq, type, type_version, recorded_at, actor, payload]
+      properties:
+        envelope_version: { const: 2 }
+        id: { $ref: '#/components/schemas/Ulid' }
+        stream: { type: string }
+        seq: { type: integer, minimum: 1 }
+        global_seq: { type: integer, minimum: 1 }
+        type: { type: string }
+        type_version: { type: integer, minimum: 1 }
+        recorded_at: { type: string, format: date-time }
+        actor: { type: object }
+        payload: { type: object }
+
+    Health:
+      type: object
+      required: [status, api_version, log_epoch, head_global_seq, disk_pressure]
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        api_version: { type: string }
+        log_epoch: { $ref: '#/components/schemas/Ulid' }
+        head_global_seq: { type: integer, minimum: 0 }
+        disk_pressure: { type: boolean }
+
+    Thread:
+      type: object
+      required: [id, project_id, role, state, depth]
+      properties:
+        id: { $ref: '#/components/schemas/Ulid' }
+        project_id: { type: string }
+        parent_id: { $ref: '#/components/schemas/Ulid' }
+        role: { type: string, enum: [coordinator, builder, ops, security, auditor] }
+        state: { $ref: '#/components/schemas/ThreadState' }
+        pause_reason: { $ref: '#/components/schemas/PauseReason' }
+        depth: { type: integer, minimum: 0 }
+        brief_version: { type: integer, minimum: 1 }
+        plan_digest: { $ref: '#/components/schemas/Sha256' }
+        revision: { type: string }
+        worktree_digest: { $ref: '#/components/schemas/Sha256' }
+        harness: { type: string }
+        model: { type: string }
+        execution:
+          type: string
+          enum: [direct, remote, sandbox]
+          description: direct is displayed as "Host access"
+        audit_status: { type: string, enum: [off, pending, running, pass, corrections_requested, error] }
+        last_seq: { type: integer, minimum: 0 }
+
+    CreateThread:
+      type: object
+      additionalProperties: false
+      required: [project_id, brief]
+      properties:
+        project_id: { type: string, minLength: 1 }
+        brief: { type: string, minLength: 1 }
+        criteria:
+          type: array
+          items: { type: string, minLength: 1 }
+        review_plan_first: { type: boolean, default: false }
+        audit: { type: string, enum: [default, off, level1, level2, level3], default: default }
+        pin: { $ref: '#/components/schemas/HarnessPin' }
+
+    HarnessPin:
+      type: object
+      additionalProperties: false
+      required: [harness, model]
+      properties:
+        harness: { type: string, enum: [codex, claude-code, kimi-code] }
+        model: { type: string, minLength: 1 }
+
+    ThreadCommand:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [command]
+          properties:
+            command: { type: string, enum: [pause, resume, cancel] }
+        - type: object
+          additionalProperties: false
+          required: [command, plan_digest]
+          description: T03. plan_digest must equal the digest of the plan revision shown for review.
+          properties:
+            command: { const: approve_plan }
+            plan_digest: { $ref: '#/components/schemas/Sha256' }
+        - type: object
+          additionalProperties: false
+          required: [command, harness, model]
+          properties:
+            command: { const: select_harness }
+            harness: { type: string, enum: [codex, claude-code, kimi-code] }
+            model: { type: string, minLength: 1 }
+        - type: object
+          additionalProperties: false
+          required: [command, decision_id, choice]
+          properties:
+            command: { const: decide }
+            decision_id: { type: string, minLength: 1 }
+            choice: { type: string, minLength: 1 }
+            note: { type: string }
+        - type: object
+          additionalProperties: false
+          required: [command, revision]
+          properties:
+            command: { type: string, enum: [accept, reject] }
+            revision: { $ref: '#/components/schemas/GitRevision' }
+            note: { type: string }
+        - type: object
+          additionalProperties: false
+          required: [command, target, to]
+          properties:
+            command: { const: change_mode }
+            target: { type: string, minLength: 1 }
+            to: { type: string, enum: [sandbox, provider, full_control] }
+        - type: object
+          additionalProperties: false
+          required: [command, external_request_id, resolution, note]
+          properties:
+            command: { const: resolve_external_request }
+            external_request_id: { $ref: '#/components/schemas/Ulid' }
+            resolution: { type: string, enum: [succeeded, failed, not_executed] }
+            note: { type: string, minLength: 1 }
+
+    CreateApproval:
+      type: object
+      additionalProperties: false
+      required: [worktree_digest, target, actions, expires_at]
+      oneOf:
+        - required: [revision]
+        - required: [plan_digest]
+      properties:
+        revision: { $ref: '#/components/schemas/GitRevision' }
+        plan_digest: { $ref: '#/components/schemas/Sha256' }
+        worktree_digest: { $ref: '#/components/schemas/Sha256' }
+        target: { type: string, minLength: 1 }
+        actions: { type: array, minItems: 1, uniqueItems: true, items: { $ref: '#/components/schemas/Action' } }
+        expires_at: { type: string, format: date-time }
+        rollback: { type: string, minLength: 1 }
+        irreversible_effects: { type: array, items: { type: string, minLength: 1 } }
+      if:
+        required: [actions]
+        properties:
+          actions:
+            contains: { enum: [net.firewall_change, net.network_change, deploy.production] }
+      then:
+        required: [plan_digest, rollback, irreversible_effects]
+        not:
+          required: [revision]
+          properties:
+            revision: { $ref: '#/components/schemas/GitRevision' }
+        properties:
+          plan_digest: { $ref: '#/components/schemas/Sha256' }
+          rollback: { type: string, minLength: 1 }
+          irreversible_effects: { type: array, items: { type: string, minLength: 1 } }
+
+    Receipt:
+      type: object
+      additionalProperties: false
+      required: [receipt_id, request_id, payload_digest, command, status, http_status, created_at]
+      properties:
+        receipt_id: { $ref: '#/components/schemas/Ulid' }
+        request_id: { $ref: '#/components/schemas/RequestIdValue' }
+        payload_digest: { $ref: '#/components/schemas/Sha256' }
+        command: { type: string, description: 'operationId, or the thread command name for sendThreadCommand' }
+        status: { type: string, enum: [accepted, rejected] }
+        http_status: { type: integer }
+        thread_id: { $ref: '#/components/schemas/Ulid' }
+        event_seq: { type: integer, minimum: 1, description: seq of the request.accepted event on the thread stream }
+        result: { type: object, description: 'Command-specific result, for example the created thread, grant or approval ID' }
+        problem: { $ref: '#/components/schemas/Problem' }
+        created_at: { type: string, format: date-time }
+      if:
+        properties: { status: { const: rejected } }
+      then:
+        required: [problem]
+        properties:
+          problem: { $ref: '#/components/schemas/Problem' }
+          http_status: { type: integer, enum: [400, 403, 404, 409, 422], description: 'Stored rejection statuses only (receipts.md section 5)' }
+      else:
+        properties:
+          http_status: { type: integer, enum: [201, 202], description: 'Accepted statuses only; 5xx and pre-receipt errors are never stored' }
+        not:
+          required: [problem]
+          properties:
+            problem: { $ref: '#/components/schemas/Problem' }
+
+    Problem:
+      type: object
+      required: [type, title, status, code]
+      properties:
+        type: { type: string, format: uri-reference }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        code:
+          type: string
+          enum:
+            - unauthorized
+            - request_id_required
+            - request_id_invalid
+            - malformed_body
+            - request_id_conflict
+            - validation_failed
+            - not_found
+            - invalid_transition
+            - policy_denied
+            - approval_required
+            - approval_stale
+            - grant_required
+            - not_owner
+            - disk_pressure
+            - cursor_ahead
+            - capability_unavailable
+            - internal
+        stored_payload_digest: { $ref: '#/components/schemas/Sha256' }
+        receipt_id: { $ref: '#/components/schemas/Ulid' }
+        head: { type: integer, minimum: 0 }
+        log_epoch: { $ref: '#/components/schemas/Ulid' }

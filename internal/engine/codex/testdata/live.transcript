@@ -1,0 +1,27 @@
+> {"method":"initialize","id":1,"params":{"clientInfo":{"name":"synch","title":"Synch","version":"0.1.0"}}}
+< {"id":1,"result":{"userAgent":"synch/0.169.0","platformFamily":"unix","platformOs":"linux"}}
+> {"method":"initialized","params":{}}
+> {"method":"thread/start","id":2,"params":{"model":"example-model","cwd":"/workspace"}}
+< {"method":"thread/started","params":{"thread":{"id":"thr_live"}}}
+< {"id":102,"result":{"thread":{"id":"thr_stale"}}}
+< {"id":2,"result":{"thread":{"id":"thr_live"}}}
+> {"method":"turn/start","id":3,"params":{"threadId":"thr_live","input":[{"type":"text","text":"Stable brief\n\nSkill \"review\" (sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824)\nhello\n\nChanging assignment"}]}}
+< {"method":"turn/started","params":{"threadId":"thr_live","turn":{"id":"turn_one","items":[],"status":"inProgress","error":null}}}
+< {"method":"item/agentMessage/delta","params":{"threadId":"thr_foreign","turnId":"turn_one","itemId":"msg","delta":"foreign"}}
+< {"method":"item/agentMessage/delta","params":{"threadId":"thr_live","turnId":"turn_stale","itemId":"msg","delta":"stale"}}
+< {"method":"item/started","params":{"threadId":"thr_live","turnId":"turn_one","item":{"id":"msg","type":"agentMessage","text":""}}}
+< {"method":"item/agentMessage/delta","params":{"threadId":"thr_live","turnId":"turn_one","itemId":"msg","delta":"hello "}}
+< {"method":"item/agentMessage/delta","params":{"threadId":"thr_live","turnId":"turn_one","itemId":"msg","delta":"world"}}
+< {"method":"item/completed","params":{"threadId":"thr_live","turnId":"turn_one","item":{"id":"msg","type":"agentMessage","text":"hello world"}}}
+< {"method":"item/started","params":{"threadId":"thr_live","turnId":"turn_one","item":{"id":"tool","type":"commandExecution","command":"echo fixture","cwd":"/workspace","status":"inProgress","commandActions":[]}}}
+< {"method":"item/completed","params":{"threadId":"thr_live","turnId":"turn_one","item":{"id":"tool","type":"commandExecution","command":"echo fixture","cwd":"/workspace","status":"completed","commandActions":[],"aggregatedOutput":"fixture\n","exitCode":0}}}
+< {"method":"turn/completed","params":{"threadId":"thr_live","turn":{"id":"turn_one","items":[],"status":"completed","error":null}}}
+< {"id":3,"result":{"turn":{"id":"turn_one","items":[],"status":"inProgress","error":null}}}
+> {"method":"turn/start","id":4,"params":{"threadId":"thr_live","input":[{"type":"text","text":"follow-up"}]}}
+< {"id":4,"result":{"turn":{"id":"turn_two","items":[],"status":"inProgress","error":null}}}
+> {"method":"turn/interrupt","id":5,"params":{"threadId":"thr_live","turnId":"turn_two"}}
+< {"method":"turn/completed","params":{"threadId":"thr_live","turn":{"id":"turn_two","items":[],"status":"interrupted","error":null}}}
+< {"method":"thread/tokenUsage/updated","params":{"threadId":"thr_live","turnId":"turn_two","tokenUsage":{"total":{"inputTokens":12,"cachedInputTokens":0,"outputTokens":3,"reasoningOutputTokens":0,"totalTokens":15},"last":{"inputTokens":12,"cachedInputTokens":0,"outputTokens":3,"reasoningOutputTokens":0,"totalTokens":15}}}}
+< {"id":5,"result":{}}
+> {"method":"thread/unsubscribe","id":6,"params":{"threadId":"thr_live"}}
+< {"id":6,"result":{"status":"unsubscribed"}}

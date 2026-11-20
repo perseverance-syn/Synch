@@ -1,0 +1,35 @@
+{
+  "envelope_version": 2,
+  "id": "01JD3QA0000000000000000003",
+  "stream": "thread:01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+  "seq": 44,
+  "global_seq": 1144,
+  "type": "child.assignment_recorded",
+  "type_version": 1,
+  "recorded_at": "2026-11-18T10:20:00Z",
+  "actor": {
+    "kind": "daemon",
+    "id": "synchd"
+  },
+  "thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+  "payload": {
+    "parent_thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+    "child_thread_id": "01JD3QB0000000000000000001",
+    "assignment_id": "01JD3QB0000000000000000002",
+    "purpose": "Implement the retry limit in the scheduler",
+    "role": "builder",
+    "role_reason": "Scheduler change needs a code author with write access to internal/sched",
+    "input_revision": "5977ec186c62ce66b2e1e48051bda521bb7f6b9f",
+    "allowed_capabilities": [
+      "fs.write:internal/sched",
+      "exec.go_test"
+    ],
+    "expected_evidence": [
+      "go-test report",
+      "diff of internal/sched"
+    ],
+    "dependencies": [
+      "01JD3QB0000000000000000003"
+    ]
+  }
+}

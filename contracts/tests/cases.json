@@ -1,0 +1,2596 @@
+{
+ "description": "Fixture cases run by contracts/check.mjs. Each case = base (shallow-merged) + data, validated against one schema. 'R000-Mnn' = the review's accepted-but-should-reject mutations, which must now be rejected.",
+ "bases": {
+  "thread_event": {
+   "envelope_version": 2,
+   "id": "01JD3QA0000000000000000010",
+   "stream": "thread:01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+   "seq": 7,
+   "global_seq": 70,
+   "recorded_at": "2026-11-18T10:00:00Z",
+   "actor": {
+    "kind": "daemon",
+    "id": "synchd"
+   },
+   "thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN"
+  },
+  "approval": {
+   "id": "apr-1",
+   "approver": "operator:alice",
+   "thread": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+   "revision": "5977ec186c62ce66b2e1e48051bda521bb7f6b9f",
+   "worktree_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "target": "staging-01",
+   "actions": [
+    "deploy.staging"
+   ],
+   "approved_at": "2026-11-18T10:00:00Z",
+   "expires_at": "2026-11-18T12:00:00Z"
+  },
+  "finding": {
+   "finding_version": 2,
+   "id": "01JD3QA0000000000000000020",
+   "fingerprint": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+   "tool": {
+    "name": "gitleaks",
+    "version": "8.21.2",
+    "binary_sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+   },
+   "rule": {
+    "id": "aws-access-token"
+   },
+   "severity": "high",
+   "component": {
+    "type": "secret",
+    "name": "aws-access-token"
+   },
+   "location": {
+    "path": "deploy/env.sh",
+    "start_line": 3
+   },
+   "evidence": {
+    "summary": "AWS access key in shell script",
+    "snippet_redacted": "AWS_KEY=[REDACTED]",
+    "report": {
+     "uri": "evidence/scan-1/gitleaks.json",
+     "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+     "redacted": true
+    }
+   },
+   "revision": "5977ec186c62ce66b2e1e48051bda521bb7f6b9f",
+   "provenance": [
+    {
+     "scan_id": "scan-1",
+     "tool": "gitleaks",
+     "report": {
+      "uri": "evidence/scan-1/gitleaks.json",
+      "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "redacted": true
+     }
+    }
+   ]
+  }
+ },
+ "cases": [
+  {
+   "name": "R000-M05 ask rule omits approval",
+   "schema": "policy",
+   "expect": "invalid",
+   "data": {
+    "policy_version": 3,
+    "source": "operator",
+    "rules": [
+     {
+      "id": "r",
+      "effect": "ask",
+      "actions": [
+       "net.firewall_change"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "R000-M06 ask binds only target",
+   "schema": "policy",
+   "expect": "invalid",
+   "data": {
+    "policy_version": 3,
+    "source": "operator",
+    "rules": [
+     {
+      "id": "r",
+      "effect": "ask",
+      "actions": [
+       "net.firewall_change"
+      ],
+      "approval": {
+       "bind": [
+        "target"
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "R000-M07 approval omits approved_at",
+   "schema": "policy",
+   "expect": "invalid",
+   "data": {
+    "policy_version": 3,
+    "source": "operator",
+    "rules": [],
+    "approvals": [
+     {
+      "$base": "approval",
+      "$delete": [
+       "approved_at"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "R000-M08 empty revision is the sole work binding",
+   "schema": "policy",
+   "expect": "invalid",
+   "data": {
+    "policy_version": 3,
+    "source": "operator",
+    "rules": [],
+    "approvals": [
+     {
+      "$base": "approval",
+      "revision": ""
+     }
+    ]
+   }
+  },
+  {
+   "name": "R000-M09 approval grants actions [*]",
+   "schema": "policy",
+   "expect": "invalid",
+   "data": {
+    "policy_version": 3,
+    "source": "operator",
+    "rules": [],
+    "approvals": [
+     {
+      "$base": "approval",
+      "actions": [
+       "*"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "R000-M10 T05 from completed to running",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "thread.state_changed",
+    "type_version": 4,
+    "payload": {
+     "from": "completed",
+     "to": "running",
+     "transition": "T05"
+    }
+   }
+  },
+  {
+   "name": "R000-M11 transition id T99",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "thread.state_changed",
+    "type_version": 4,
+    "payload": {
+     "from": "queued",
+     "to": "running",
+     "transition": "T99"
+    }
+   }
+  },
+  {
+   "name": "R000-M12 T15 enters paused without reason",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "thread.state_changed",
+    "type_version": 4,
+    "payload": {
+     "from": "running",
+     "to": "paused",
+     "transition": "T15"
+    }
+   }
+  },
+  {
+   "name": "R000-M13 thread transition on system stream",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "stream": "system",
+    "type": "thread.state_changed",
+    "type_version": 4,
+    "payload": {
+     "from": "queued",
+     "to": "running",
+     "transition": "T05"
+    }
+   }
+  },
+  {
+   "name": "R000-M14 sandbox active with host processes running",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "mode.changed",
+    "type_version": 2,
+    "payload": {
+     "target": "build-01",
+     "from": "full_control",
+     "to": "sandbox",
+     "phase": "active",
+     "host_processes_stopped": false,
+     "actor": "operator:alice"
+    }
+   }
+  },
+  {
+   "name": "R000-M15 scanner event with empty finding",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "finding.recorded",
+    "type_version": 2,
+    "payload": {
+     "source": "scanner",
+     "finding": {}
+    }
+   }
+  },
+  {
+   "name": "neg: skill file with allow rule",
+   "schema": "policy",
+   "expect": "invalid",
+   "data": {
+    "policy_version": 3,
+    "source": "skill",
+    "rules": [
+     {
+      "id": "x",
+      "effect": "allow",
+      "actions": [
+       "host.*"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "neg: skill file carrying an approval",
+   "schema": "policy",
+   "expect": "invalid",
+   "data": {
+    "policy_version": 3,
+    "source": "skill",
+    "rules": [],
+    "approvals": [
+     {
+      "$base": "approval"
+     }
+    ]
+   }
+  },
+  {
+   "name": "neg: approval without worktree_digest",
+   "schema": "policy",
+   "expect": "invalid",
+   "data": {
+    "policy_version": 3,
+    "source": "operator",
+    "rules": [],
+    "approvals": [
+     {
+      "$base": "approval",
+      "$delete": [
+       "worktree_digest"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "neg: approval with both revision and plan_digest",
+   "schema": "policy",
+   "expect": "invalid",
+   "data": {
+    "policy_version": 3,
+    "source": "operator",
+    "rules": [],
+    "approvals": [
+     {
+      "$base": "approval",
+      "plan_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+     }
+    ]
+   }
+  },
+  {
+   "name": "neg: firewall approval without rollback",
+   "schema": "policy",
+   "expect": "invalid",
+   "data": {
+    "policy_version": 3,
+    "source": "operator",
+    "rules": [],
+    "approvals": [
+     {
+      "$base": "approval",
+      "$delete": [
+       "revision"
+      ],
+      "plan_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+      "actions": [
+       "net.firewall_change"
+      ],
+      "irreversible_effects": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "neg: approval with empty target",
+   "schema": "policy",
+   "expect": "invalid",
+   "data": {
+    "policy_version": 3,
+    "source": "operator",
+    "rules": [],
+    "approvals": [
+     {
+      "$base": "approval",
+      "target": ""
+     }
+    ]
+   }
+  },
+  {
+   "name": "neg: T21 leaving daemon_recovery (must be T22/T23/T36/T37)",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "thread.state_changed",
+    "type_version": 4,
+    "payload": {
+     "from": "paused",
+     "to": "queued",
+     "transition": "T21",
+     "from_pause_reason": "daemon_recovery"
+    }
+   }
+  },
+  {
+   "name": "neg: T24 from plan_review (restart must not discard plan review)",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "thread.state_changed",
+    "type_version": 4,
+    "payload": {
+     "from": "plan_review",
+     "to": "paused",
+     "transition": "T24",
+     "pause_reason": "daemon_recovery",
+     "interrupted_state": "running"
+    }
+   }
+  },
+  {
+   "name": "neg: pause_reason on a non-pause transition",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "thread.state_changed",
+    "type_version": 4,
+    "payload": {
+     "from": "queued",
+     "to": "running",
+     "transition": "T05",
+     "pause_reason": "operator"
+    }
+   }
+  },
+  {
+   "name": "neg: external_request.persisted without endpoint",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "external_request.persisted",
+    "type_version": 3,
+    "payload": {
+     "external_request_id": "01JD3QA0000000000000000030",
+     "driver": "proxmox",
+     "operation": "snapshot",
+     "resource": "vm-101",
+     "params_digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+    }
+   }
+  },
+  {
+   "name": "neg: resolved via provider_task without task id",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "external_request.resolved",
+    "type_version": 4,
+    "payload": {
+     "external_request_id": "01JD3QA0000000000000000030",
+     "resolution": "succeeded",
+     "via": "provider_task",
+     "operation": "snapshot"
+    }
+   }
+  },
+  {
+   "name": "neg: resolved unknown but claims a source",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "external_request.resolved",
+    "type_version": 4,
+    "payload": {
+     "external_request_id": "01JD3QA0000000000000000030",
+     "resolution": "unknown",
+     "via": "response",
+     "operation": "snapshot"
+    }
+   }
+  },
+  {
+   "name": "neg: ingested runner event without source",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "actor": {
+     "kind": "runner",
+     "id": "lab-runner-1"
+    },
+    "occurred_at": "2026-11-18T09:59:00Z",
+    "type": "check.result",
+    "type_version": 1,
+    "payload": {
+     "check": "go-test",
+     "status": "passed",
+     "revision": "5977ec186c62ce66b2e1e48051bda521bb7f6b9f"
+    }
+   }
+  },
+  {
+   "name": "neg: plan.revised within_scope true with scope changes",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "plan.revised",
+    "type_version": 2,
+    "payload": {
+     "plan_revision": 2,
+     "plan_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+     "brief_version": 1,
+     "within_scope": true,
+     "scope_changes": [
+      "new_target"
+     ]
+    }
+   }
+  },
+  {
+   "name": "neg: resource.pressure on a thread stream",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "resource.pressure",
+    "type_version": 1,
+    "payload": {
+     "resource": "disk",
+     "level": "pressure"
+    }
+   }
+  },
+  {
+   "name": "neg: finding without component",
+   "schema": "finding",
+   "expect": "invalid",
+   "data": {
+    "$base": "finding",
+    "$delete": [
+     "component"
+    ]
+   }
+  },
+  {
+   "name": "neg: finding report not marked redacted",
+   "schema": "finding",
+   "expect": "invalid",
+   "data": {
+    "$base": "finding",
+    "evidence": {
+     "summary": "s",
+     "report": {
+      "uri": "r",
+      "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "redacted": false
+     }
+    }
+   }
+  },
+  {
+   "name": "neg: runner-local event with daemon-only type",
+   "schema": "runner",
+   "expect": "invalid",
+   "data": {
+    "runner_event_version": 2,
+    "runner": "lab-runner-1",
+    "source_seq": 3,
+    "id": "01JD3QA0000000000000000040",
+    "type": "thread.state_changed",
+    "type_version": 4,
+    "occurred_at": "2026-11-18T09:59:00Z",
+    "thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+    "payload": {}
+   }
+  },
+  {
+   "name": "pos: sandbox active after host processes stopped",
+   "schema": "catalogue",
+   "expect": "valid",
+   "base": "thread_event",
+   "data": {
+    "type": "mode.changed",
+    "type_version": 2,
+    "payload": {
+     "target": "build-01",
+     "from": "full_control",
+     "to": "sandbox",
+     "phase": "active",
+     "host_processes_stopped": true,
+     "actor": "operator:alice"
+    }
+   }
+  },
+  {
+   "name": "pos: scanner finding event",
+   "schema": "catalogue",
+   "expect": "valid",
+   "base": "thread_event",
+   "data": {
+    "type": "finding.recorded",
+    "type_version": 2,
+    "payload": {
+     "source": "scanner",
+     "finding": {
+      "$base": "finding"
+     }
+    }
+   }
+  },
+  {
+   "name": "pos: T24 records interrupted state",
+   "schema": "catalogue",
+   "expect": "valid",
+   "base": "thread_event",
+   "data": {
+    "type": "thread.state_changed",
+    "type_version": 4,
+    "payload": {
+     "from": "running",
+     "to": "paused",
+     "transition": "T24",
+     "pause_reason": "daemon_recovery",
+     "interrupted_state": "running"
+    }
+   }
+  },
+  {
+   "name": "pos: T34 disagreement escalates to operator",
+   "schema": "catalogue",
+   "expect": "valid",
+   "base": "thread_event",
+   "data": {
+    "type": "thread.state_changed",
+    "type_version": 4,
+    "payload": {
+     "from": "paused",
+     "to": "awaiting_decision",
+     "transition": "T34",
+     "from_pause_reason": "disagreement"
+    }
+   }
+  },
+  {
+   "name": "pos: external request persisted with full identity",
+   "schema": "catalogue",
+   "expect": "valid",
+   "base": "thread_event",
+   "data": {
+    "type": "external_request.persisted",
+    "type_version": 3,
+    "payload": {
+     "external_request_id": "01JD3QA0000000000000000030",
+     "driver": "proxmox",
+     "endpoint": "pve-lab-01",
+     "operation": "snapshot",
+     "resource": "vm-101",
+     "params_digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+    }
+   }
+  },
+  {
+   "name": "pos: ingested runner event with source",
+   "schema": "catalogue",
+   "expect": "valid",
+   "base": "thread_event",
+   "data": {
+    "actor": {
+     "kind": "runner",
+     "id": "lab-runner-1"
+    },
+    "source": {
+     "runner": "lab-runner-1",
+     "seq": 12
+    },
+    "occurred_at": "2026-11-18T09:59:00Z",
+    "type": "check.result",
+    "type_version": 1,
+    "payload": {
+     "check": "go-test",
+     "status": "passed",
+     "revision": "5977ec186c62ce66b2e1e48051bda521bb7f6b9f"
+    }
+   }
+  },
+  {
+   "name": "pos: runner-local journal event",
+   "schema": "runner",
+   "expect": "valid",
+   "data": {
+    "runner_event_version": 2,
+    "runner": "lab-runner-1",
+    "source_seq": 12,
+    "id": "01JD3QA0000000000000000040",
+    "type": "check.result",
+    "type_version": 1,
+    "occurred_at": "2026-11-18T09:59:00Z",
+    "thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+    "payload": {
+     "check": "go-test",
+     "status": "passed",
+     "revision": "5977ec186c62ce66b2e1e48051bda521bb7f6b9f"
+    }
+   }
+  },
+  {
+   "name": "pos: bounded staging approval",
+   "schema": "policy",
+   "expect": "valid",
+   "data": {
+    "policy_version": 3,
+    "source": "operator",
+    "rules": [
+     {
+      "id": "deploy.ask",
+      "effect": "ask",
+      "actions": [
+       "deploy.staging"
+      ],
+      "approval": {
+       "max_ttl": "PT4H"
+      }
+     }
+    ],
+    "approvals": [
+     {
+      "$base": "approval"
+     }
+    ]
+   }
+  },
+  {
+   "name": "wire: receipts.md A request body",
+   "schema": "openapi#CreateThread",
+   "expect": "valid",
+   "data": {
+    "project_id": "p1",
+    "brief": "Fix CI"
+   }
+  },
+  {
+   "name": "wire: R000-R6 old example body with role is rejected",
+   "schema": "openapi#CreateThread",
+   "expect": "invalid",
+   "data": {
+    "project_id": "p1",
+    "brief": "Fix CI",
+    "role": "coordinator"
+   }
+  },
+  {
+   "name": "wire: receipts.md A receipt",
+   "schema": "openapi#Receipt",
+   "expect": "valid",
+   "data": {
+    "receipt_id": "01JD3QB0000000000000000001",
+    "request_id": "c-1",
+    "payload_digest": "sha256:89242a142a3c69cebbe2f28bf31cf7adcc97db62f1c1d3bbe0c9a2173e725883",
+    "command": "createThread",
+    "status": "accepted",
+    "http_status": 201,
+    "thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+    "event_seq": 1,
+    "result": {
+     "thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN"
+    },
+    "created_at": "2026-11-18T10:00:00Z"
+   }
+  },
+  {
+   "name": "wire: receipts.md B conflict problem",
+   "schema": "openapi#Problem",
+   "expect": "valid",
+   "data": {
+    "type": "https://synch.local/problems/request_id_conflict",
+    "title": "Request ID reused with a different payload",
+    "status": 409,
+    "code": "request_id_conflict",
+    "stored_payload_digest": "sha256:89242a142a3c69cebbe2f28bf31cf7adcc97db62f1c1d3bbe0c9a2173e725883",
+    "receipt_id": "01JD3QB0000000000000000001"
+   }
+  },
+  {
+   "name": "wire: receipts.md C cancel command",
+   "schema": "openapi#ThreadCommand",
+   "expect": "valid",
+   "data": {
+    "command": "cancel"
+   }
+  },
+  {
+   "name": "wire: receipts.md D accept command",
+   "schema": "openapi#ThreadCommand",
+   "expect": "valid",
+   "data": {
+    "command": "accept",
+    "revision": "0000000000000000000000000000000000000000"
+   }
+  },
+  {
+   "name": "wire: rejected receipt must carry problem",
+   "schema": "openapi#Receipt",
+   "expect": "invalid",
+   "data": {
+    "receipt_id": "01JD3QB0000000000000000003",
+    "request_id": "c-3",
+    "payload_digest": "sha256:89242a142a3c69cebbe2f28bf31cf7adcc97db62f1c1d3bbe0c9a2173e725883",
+    "command": "accept",
+    "status": "rejected",
+    "http_status": 409,
+    "created_at": "2026-11-18T10:00:00Z"
+   }
+  },
+  {
+   "name": "wire: receipt status conflict is not a receipt status",
+   "schema": "openapi#Receipt",
+   "expect": "invalid",
+   "data": {
+    "receipt_id": "01JD3QB0000000000000000003",
+    "request_id": "c-3",
+    "payload_digest": "sha256:89242a142a3c69cebbe2f28bf31cf7adcc97db62f1c1d3bbe0c9a2173e725883",
+    "command": "accept",
+    "status": "conflict",
+    "http_status": 409,
+    "created_at": "2026-11-18T10:00:00Z"
+   }
+  },
+  {
+   "name": "wire: R000-R2 approve_plan without plan_digest",
+   "schema": "openapi#ThreadCommand",
+   "expect": "invalid",
+   "data": {
+    "command": "approve_plan"
+   }
+  },
+  {
+   "name": "wire: approve_plan with digest",
+   "schema": "openapi#ThreadCommand",
+   "expect": "valid",
+   "data": {
+    "command": "approve_plan",
+    "plan_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+   }
+  },
+  {
+   "name": "wire: CreateApproval actions [*]",
+   "schema": "openapi#CreateApproval",
+   "expect": "invalid",
+   "data": {
+    "revision": "5977ec186c62ce66b2e1e48051bda521bb7f6b9f",
+    "worktree_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target": "staging-01",
+    "actions": [
+     "*"
+    ],
+    "expires_at": "2026-11-18T12:00:00Z"
+   }
+  },
+  {
+   "name": "wire: CreateApproval empty target",
+   "schema": "openapi#CreateApproval",
+   "expect": "invalid",
+   "data": {
+    "revision": "5977ec186c62ce66b2e1e48051bda521bb7f6b9f",
+    "worktree_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target": "",
+    "actions": [
+     "deploy.staging"
+    ],
+    "expires_at": "2026-11-18T12:00:00Z"
+   }
+  },
+  {
+   "name": "wire: CreateApproval without worktree_digest",
+   "schema": "openapi#CreateApproval",
+   "expect": "invalid",
+   "data": {
+    "revision": "5977ec186c62ce66b2e1e48051bda521bb7f6b9f",
+    "target": "staging-01",
+    "actions": [
+     "deploy.staging"
+    ],
+    "rule": "deploy.ask",
+    "expires_at": "2026-11-18T12:00:00Z"
+   }
+  },
+  {
+   "name": "wire: CreateApproval firewall without rollback",
+   "schema": "openapi#CreateApproval",
+   "expect": "invalid",
+   "data": {
+    "plan_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+    "worktree_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target": "fw-edge-01",
+    "actions": [
+     "net.firewall_change"
+    ],
+    "expires_at": "2026-11-18T12:00:00Z"
+   }
+  },
+  {
+   "name": "wire: CreateApproval firewall complete",
+   "schema": "openapi#CreateApproval",
+   "expect": "valid",
+   "data": {
+    "plan_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+    "worktree_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target": "fw-edge-01",
+    "actions": [
+     "net.firewall_change"
+    ],
+    "expires_at": "2026-11-18T12:00:00Z",
+    "rollback": "synch-checkpoint:fw-edge-01/x (verified)",
+    "irreversible_effects": []
+   }
+  },
+  {
+   "name": "R000-2 T24 interrupted_state differs from from",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "thread.state_changed",
+    "type_version": 4,
+    "payload": {
+     "from": "running",
+     "to": "paused",
+     "transition": "T24",
+     "pause_reason": "daemon_recovery",
+     "interrupted_state": "verifying"
+    }
+   }
+  },
+  {
+   "name": "R000-2 T24 thread_id differs from stream owner (cross-check C1)",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "thread.state_changed",
+    "type_version": 4,
+    "payload": {
+     "from": "running",
+     "to": "paused",
+     "transition": "T24",
+     "pause_reason": "daemon_recovery",
+     "interrupted_state": "running"
+    },
+    "thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPM"
+   }
+  },
+  {
+   "name": "R000-2 daemon grant.revoked without operator issuer",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "actor": {
+     "kind": "daemon",
+     "id": "synchd"
+    },
+    "type": "grant.revoked",
+    "type_version": 2,
+    "payload": {
+     "grant_id": "grt-0001",
+     "affected_threads": [],
+     "settled": true
+    }
+   },
+   "context": {
+    "grants": [
+     {
+      "id": "grt-0001",
+      "thread": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN"
+     }
+    ],
+    "terminal_threads": [
+     "01JD3Q8Z7Y6X5W4V3T2S1R0QPN"
+    ]
+   }
+  },
+  {
+   "name": "R000-2 ask max_ttl PT1H1H",
+   "schema": "policy",
+   "expect": "invalid",
+   "data": {
+    "policy_version": 3,
+    "source": "operator",
+    "rules": [
+     {
+      "id": "r",
+      "effect": "ask",
+      "actions": [
+       "net.firewall_change"
+      ],
+      "approval": {
+       "max_ttl": "PT1H1H"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "R000-2 production approval bound only to a revision",
+   "schema": "policy",
+   "expect": "invalid",
+   "data": {
+    "policy_version": 3,
+    "source": "operator",
+    "rules": [],
+    "approvals": [
+     {
+      "$base": "approval",
+      "actions": [
+       "deploy.production"
+      ],
+      "rollback": "rb",
+      "irreversible_effects": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "R000-2 operator resolution with empty note",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "external_request.resolved",
+    "type_version": 4,
+    "payload": {
+     "external_request_id": "01JD3QA0000000000000000030",
+     "operation": "snapshot",
+     "resolution": "succeeded",
+     "via": "operator",
+     "operator": "operator:alice",
+     "note": ""
+    }
+   }
+  },
+  {
+   "name": "R000-2 not_executed attributed to a token-bearing resource",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "external_request.resolved",
+    "type_version": 4,
+    "payload": {
+     "external_request_id": "01JD3QA0000000000000000030",
+     "operation": "snapshot",
+     "resolution": "not_executed",
+     "via": "resulting_resource",
+     "resource_evidence": {
+      "resource": "vm-101/snap-x",
+      "client_token": "synch-01JD3QA0000000000000000030"
+     }
+    }
+   }
+  },
+  {
+   "name": "R000-2 runner-local check.result with empty payload",
+   "schema": "runner",
+   "expect": "invalid",
+   "data": {
+    "runner_event_version": 2,
+    "runner": "lab-runner-1",
+    "source_seq": 4,
+    "id": "01JD3QA0000000000000000041",
+    "type": "check.result",
+    "type_version": 1,
+    "occurred_at": "2026-11-18T09:59:00Z",
+    "thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+    "payload": {}
+   }
+  },
+  {
+   "name": "sib: network change approval bound only to a revision",
+   "schema": "policy",
+   "expect": "invalid",
+   "data": {
+    "policy_version": 3,
+    "source": "operator",
+    "rules": [],
+    "approvals": [
+     {
+      "$base": "approval",
+      "actions": [
+       "net.network_change"
+      ],
+      "rollback": "rb",
+      "irreversible_effects": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "sib: approval expiring before it was approved (cross-check P1)",
+   "schema": "policy",
+   "expect": "invalid",
+   "data": {
+    "policy_version": 3,
+    "source": "operator",
+    "rules": [],
+    "approvals": [
+     {
+      "$base": "approval",
+      "expires_at": "2026-11-18T09:00:00Z"
+     }
+    ]
+   }
+  },
+  {
+   "name": "sib: max_ttl PT (no components)",
+   "schema": "policy",
+   "expect": "invalid",
+   "data": {
+    "policy_version": 3,
+    "source": "operator",
+    "rules": [
+     {
+      "id": "r",
+      "effect": "ask",
+      "actions": [
+       "x.y"
+      ],
+      "approval": {
+       "max_ttl": "PT"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "pos: max_ttl P1DT2H30M",
+   "schema": "policy",
+   "expect": "valid",
+   "data": {
+    "policy_version": 3,
+    "source": "operator",
+    "rules": [
+     {
+      "id": "r",
+      "effect": "ask",
+      "actions": [
+       "x.y"
+      ],
+      "approval": {
+       "max_ttl": "P1DT2H30M"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "name": "pos: production approval bound to plan digest",
+   "schema": "policy",
+   "expect": "valid",
+   "data": {
+    "policy_version": 3,
+    "source": "operator",
+    "rules": [],
+    "approvals": [
+     {
+      "$base": "approval",
+      "$delete": [
+       "revision"
+      ],
+      "plan_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+      "actions": [
+       "deploy.production"
+      ],
+      "rollback": "rb",
+      "irreversible_effects": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "sib: failed attributed to a resulting resource",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "external_request.resolved",
+    "type_version": 4,
+    "payload": {
+     "external_request_id": "01JD3QA0000000000000000030",
+     "operation": "snapshot",
+     "resolution": "failed",
+     "via": "resulting_resource",
+     "resource_evidence": {
+      "resource": "vm-101/snap-x",
+      "client_token": "synch-01JD3QA0000000000000000030"
+     }
+    }
+   }
+  },
+  {
+   "name": "sib: resulting_resource evidence for a start operation",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "external_request.resolved",
+    "type_version": 4,
+    "payload": {
+     "external_request_id": "01JD3QA0000000000000000030",
+     "operation": "start",
+     "resolution": "succeeded",
+     "via": "resulting_resource",
+     "resource_evidence": {
+      "resource": "vm-101",
+      "client_token": "synch-01JD3QA0000000000000000030"
+     }
+    }
+   }
+  },
+  {
+   "name": "sib: resource evidence token of another request (cross-check C5)",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "external_request.resolved",
+    "type_version": 4,
+    "payload": {
+     "external_request_id": "01JD3QA0000000000000000030",
+     "operation": "snapshot",
+     "resolution": "succeeded",
+     "via": "resulting_resource",
+     "resource_evidence": {
+      "resource": "vm-101/snap-x",
+      "client_token": "synch-01JD3QA0000000000000000031"
+     }
+    }
+   }
+  },
+  {
+   "name": "pos: succeeded via token-bearing snapshot",
+   "schema": "catalogue",
+   "expect": "valid",
+   "base": "thread_event",
+   "data": {
+    "type": "external_request.resolved",
+    "type_version": 4,
+    "payload": {
+     "external_request_id": "01JD3QA0000000000000000030",
+     "operation": "snapshot",
+     "resolution": "succeeded",
+     "via": "resulting_resource",
+     "resource_evidence": {
+      "resource": "vm-101/snap-x",
+      "client_token": "synch-01JD3QA0000000000000000030"
+     }
+    }
+   }
+  },
+  {
+   "name": "pos: not_executed via operator with note",
+   "schema": "catalogue",
+   "expect": "valid",
+   "base": "thread_event",
+   "data": {
+    "type": "external_request.resolved",
+    "type_version": 4,
+    "payload": {
+     "external_request_id": "01JD3QA0000000000000000030",
+     "operation": "snapshot",
+     "resolution": "not_executed",
+     "via": "operator",
+     "operator": "operator:alice",
+     "note": "Checked provider console: no task, no snapshot."
+    }
+   }
+  },
+  {
+   "name": "sib: thread.created payload for another thread (cross-check C2)",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "thread.created",
+    "type_version": 1,
+    "payload": {
+     "thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPM",
+     "project_id": "p1",
+     "role": "builder",
+     "depth": 1
+    }
+   }
+  },
+  {
+   "name": "sib: approval.recorded for another thread (cross-check C3)",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "approval.recorded",
+    "type_version": 3,
+    "payload": {
+     "$base": "approval",
+     "thread": "01JD3Q8Z7Y6X5W4V3T2S1R0QPM"
+    }
+   }
+  },
+  {
+   "name": "pos: approval.recorded for its own thread",
+   "schema": "catalogue",
+   "expect": "valid",
+   "base": "thread_event",
+   "data": {
+    "type": "approval.recorded",
+    "type_version": 3,
+    "payload": {
+     "$base": "approval"
+    }
+   }
+  },
+  {
+   "name": "sib: grant.revoked cause operator without revoked_by",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "grant.revoked",
+    "type_version": 2,
+    "payload": {
+     "grant_id": "grt-0001",
+     "affected_threads": [],
+     "settled": true,
+     "cause": "operator"
+    }
+   },
+   "context": {
+    "grants": [
+     {
+      "id": "grt-0001",
+      "thread": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN"
+     }
+    ],
+    "terminal_threads": [
+     "01JD3Q8Z7Y6X5W4V3T2S1R0QPN"
+    ]
+   }
+  },
+  {
+   "name": "pos: grant.revoked by operator",
+   "schema": "catalogue",
+   "expect": "valid",
+   "base": "thread_event",
+   "data": {
+    "type": "grant.revoked",
+    "type_version": 2,
+    "payload": {
+     "grant_id": "grt-0001",
+     "affected_threads": [
+      "01JD3Q8Z7Y6X5W4V3T2S1R0QPN"
+     ],
+     "settled": true,
+     "cause": "operator",
+     "revoked_by": "operator:alice"
+    }
+   },
+   "context": {
+    "grants": [
+     {
+      "id": "grt-0001",
+      "thread": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN"
+     }
+    ],
+    "terminal_threads": [
+     "01JD3Q8Z7Y6X5W4V3T2S1R0QPN"
+    ]
+   }
+  },
+  {
+   "name": "pos: grant ended with the granted thread",
+   "schema": "catalogue",
+   "expect": "valid",
+   "base": "thread_event",
+   "data": {
+    "actor": {
+     "kind": "daemon",
+     "id": "synchd"
+    },
+    "type": "grant.revoked",
+    "type_version": 2,
+    "payload": {
+     "grant_id": "grt-0001",
+     "affected_threads": [],
+     "settled": true,
+     "cause": "thread_ended",
+     "ended_thread": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN"
+    }
+   },
+   "context": {
+    "grants": [
+     {
+      "id": "grt-0001",
+      "thread": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN"
+     }
+    ],
+    "terminal_threads": [
+     "01JD3Q8Z7Y6X5W4V3T2S1R0QPN"
+    ]
+   }
+  },
+  {
+   "name": "sib: policy.decided with unqualified rule id",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "policy.decided",
+    "type_version": 2,
+    "payload": {
+     "action": "net.firewall_change",
+     "decision": "ask",
+     "rule_id": "net.firewall.ask",
+     "machine": "fw-edge-01",
+     "outcome": "waiting_approval"
+    }
+   }
+  },
+  {
+   "name": "pos: policy.decided with qualified rule id",
+   "schema": "catalogue",
+   "expect": "valid",
+   "base": "thread_event",
+   "data": {
+    "type": "policy.decided",
+    "type_version": 2,
+    "payload": {
+     "action": "net.firewall_change",
+     "decision": "ask",
+     "rule_id": "operator:store#net.firewall.ask",
+     "machine": "fw-edge-01",
+     "outcome": "waiting_approval"
+    }
+   }
+  },
+  {
+   "name": "sib: T37 is retired (recovery waits in daemon_recovery)",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "thread.state_changed",
+    "type_version": 4,
+    "payload": {
+     "from": "paused",
+     "to": "paused",
+     "transition": "T37",
+     "from_pause_reason": "daemon_recovery",
+     "pause_reason": "reconciliation"
+    }
+   }
+  },
+  {
+   "name": "sib: T21 cannot leave daemon_recovery",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "thread.state_changed",
+    "type_version": 4,
+    "payload": {
+     "from": "paused",
+     "to": "queued",
+     "transition": "T21",
+     "from_pause_reason": "daemon_recovery"
+    }
+   }
+  },
+  {
+   "name": "pos: T23 lost work found when leaving a reconciliation pause",
+   "schema": "catalogue",
+   "expect": "valid",
+   "base": "thread_event",
+   "data": {
+    "type": "thread.state_changed",
+    "type_version": 4,
+    "payload": {
+     "from": "paused",
+     "to": "paused",
+     "transition": "T23",
+     "from_pause_reason": "reconciliation",
+     "pause_reason": "harness_unavailable"
+    }
+   }
+  },
+  {
+   "name": "pos: T36 lost work, attempts exhausted, from operator pause",
+   "schema": "catalogue",
+   "expect": "valid",
+   "base": "thread_event",
+   "data": {
+    "type": "thread.state_changed",
+    "type_version": 4,
+    "payload": {
+     "from": "paused",
+     "to": "failed",
+     "transition": "T36",
+     "from_pause_reason": "operator"
+    }
+   }
+  },
+  {
+   "name": "pos: T24 from verifying",
+   "schema": "catalogue",
+   "expect": "valid",
+   "base": "thread_event",
+   "data": {
+    "type": "thread.state_changed",
+    "type_version": 4,
+    "payload": {
+     "from": "verifying",
+     "to": "paused",
+     "transition": "T24",
+     "pause_reason": "daemon_recovery",
+     "interrupted_state": "verifying"
+    }
+   }
+  },
+  {
+   "name": "sib: runner-local policy.decided with wrong type_version",
+   "schema": "runner",
+   "expect": "invalid",
+   "data": {
+    "runner_event_version": 2,
+    "runner": "lab-runner-1",
+    "source_seq": 5,
+    "id": "01JD3QA0000000000000000042",
+    "type": "policy.decided",
+    "type_version": 1,
+    "occurred_at": "2026-11-18T09:59:00Z",
+    "thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+    "payload": {
+     "action": "git.push",
+     "decision": "allow",
+     "machine": "lab-runner-1",
+     "outcome": "executed"
+    }
+   }
+  },
+  {
+   "name": "wire: accepted receipt with http_status 500",
+   "schema": "openapi#Receipt",
+   "expect": "invalid",
+   "data": {
+    "receipt_id": "01JD3QB0000000000000000001",
+    "request_id": "c-1",
+    "payload_digest": "sha256:89242a142a3c69cebbe2f28bf31cf7adcc97db62f1c1d3bbe0c9a2173e725883",
+    "command": "createThread",
+    "status": "accepted",
+    "http_status": 500,
+    "created_at": "2026-11-18T10:00:00Z"
+   }
+  },
+  {
+   "name": "wire: rejected receipt with http_status 201",
+   "schema": "openapi#Receipt",
+   "expect": "invalid",
+   "data": {
+    "receipt_id": "01JD3QB0000000000000000003",
+    "request_id": "c-3",
+    "payload_digest": "sha256:89242a142a3c69cebbe2f28bf31cf7adcc97db62f1c1d3bbe0c9a2173e725883",
+    "command": "accept",
+    "status": "rejected",
+    "http_status": 201,
+    "problem": {
+     "type": "about:blank",
+     "title": "x",
+     "status": 409,
+     "code": "invalid_transition"
+    },
+    "created_at": "2026-11-18T10:00:00Z"
+   }
+  },
+  {
+   "name": "wire: CreateApproval production bound only to revision",
+   "schema": "openapi#CreateApproval",
+   "expect": "invalid",
+   "data": {
+    "revision": "5977ec186c62ce66b2e1e48051bda521bb7f6b9f",
+    "worktree_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target": "prod-01",
+    "actions": [
+     "deploy.production"
+    ],
+    "expires_at": "2026-11-18T12:00:00Z",
+    "rollback": "rb",
+    "irreversible_effects": []
+   }
+  },
+  {
+   "name": "R000-3 not_executed via response with own token on resulting resource",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "external_request.resolved",
+    "type_version": 4,
+    "payload": {
+     "external_request_id": "01JD3QA0000000000000000030",
+     "operation": "snapshot",
+     "resolution": "not_executed",
+     "via": "response",
+     "resource_evidence": {
+      "resource": "vm-101/snap-x",
+      "client_token": "synch-01JD3QA0000000000000000030"
+     }
+    }
+   }
+  },
+  {
+   "name": "R000-3 failed via response with own token on resulting resource",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "external_request.resolved",
+    "type_version": 4,
+    "payload": {
+     "external_request_id": "01JD3QA0000000000000000030",
+     "operation": "snapshot",
+     "resolution": "failed",
+     "via": "response",
+     "resource_evidence": {
+      "resource": "vm-101/snap-x",
+      "client_token": "synch-01JD3QA0000000000000000030"
+     }
+    }
+   }
+  },
+  {
+   "name": "R000-3 thread_ended revocation names an unrelated thread (cross-check C6)",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "actor": {
+     "kind": "daemon",
+     "id": "synchd"
+    },
+    "type": "grant.revoked",
+    "type_version": 2,
+    "payload": {
+     "grant_id": "grt-0001",
+     "affected_threads": [],
+     "settled": true,
+     "cause": "thread_ended",
+     "ended_thread": "01JD3Q8Z7Y6X5W4V3T2S1R0QPM"
+    }
+   },
+   "context": {
+    "grants": [
+     {
+      "id": "grt-0001",
+      "thread": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN"
+     }
+    ],
+    "terminal_threads": [
+     "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+     "01JD3Q8Z7Y6X5W4V3T2S1R0QPM"
+    ]
+   }
+  },
+  {
+   "name": "sib: thread_ended revocation before the granted thread is terminal (C6)",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "actor": {
+     "kind": "daemon",
+     "id": "synchd"
+    },
+    "type": "grant.revoked",
+    "type_version": 2,
+    "payload": {
+     "grant_id": "grt-0001",
+     "affected_threads": [],
+     "settled": true,
+     "cause": "thread_ended",
+     "ended_thread": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN"
+    }
+   },
+   "context": {
+    "grants": [
+     {
+      "id": "grt-0001",
+      "thread": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN"
+     }
+    ],
+    "terminal_threads": []
+   }
+  },
+  {
+   "name": "sib: revocation of an unknown grant (C6)",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "actor": {
+     "kind": "daemon",
+     "id": "synchd"
+    },
+    "type": "grant.revoked",
+    "type_version": 2,
+    "payload": {
+     "grant_id": "grt-9999",
+     "affected_threads": [],
+     "settled": true,
+     "cause": "thread_ended",
+     "ended_thread": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN"
+    }
+   },
+   "context": {
+    "grants": [
+     {
+      "id": "grt-0001",
+      "thread": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN"
+     }
+    ],
+    "terminal_threads": [
+     "01JD3Q8Z7Y6X5W4V3T2S1R0QPN"
+    ]
+   }
+  },
+  {
+   "name": "sib: not_executed via provider_task with a task id",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "external_request.resolved",
+    "type_version": 4,
+    "payload": {
+     "external_request_id": "01JD3QA0000000000000000030",
+     "operation": "snapshot",
+     "resolution": "not_executed",
+     "via": "provider_task",
+     "provider_task_id": "UPID:1"
+    }
+   }
+  },
+  {
+   "name": "sib: authoritative absence carrying a task id",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "external_request.resolved",
+    "type_version": 4,
+    "payload": {
+     "external_request_id": "01JD3QA0000000000000000030",
+     "operation": "snapshot",
+     "resolution": "not_executed",
+     "via": "provider_task_absent",
+     "provider_task_id": "UPID:1",
+     "absence_lookup": {
+      "client_token": "synch-01JD3QA0000000000000000030",
+      "queried_at": "2026-11-18T10:05:00Z"
+     }
+    }
+   }
+  },
+  {
+   "name": "sib: authoritative absence for another request token (C5)",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "external_request.resolved",
+    "type_version": 4,
+    "payload": {
+     "external_request_id": "01JD3QA0000000000000000030",
+     "operation": "snapshot",
+     "resolution": "not_executed",
+     "via": "provider_task_absent",
+     "absence_lookup": {
+      "client_token": "synch-01JD3QA0000000000000000031",
+      "queried_at": "2026-11-18T10:05:00Z"
+     }
+    }
+   }
+  },
+  {
+   "name": "sib: succeeded via authoritative absence",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "external_request.resolved",
+    "type_version": 4,
+    "payload": {
+     "external_request_id": "01JD3QA0000000000000000030",
+     "operation": "snapshot",
+     "resolution": "succeeded",
+     "via": "provider_task_absent",
+     "absence_lookup": {
+      "client_token": "synch-01JD3QA0000000000000000030",
+      "queried_at": "2026-11-18T10:05:00Z"
+     }
+    }
+   }
+  },
+  {
+   "name": "sib: unknown carrying resource evidence",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "external_request.resolved",
+    "type_version": 4,
+    "payload": {
+     "external_request_id": "01JD3QA0000000000000000030",
+     "operation": "snapshot",
+     "resolution": "unknown",
+     "via": "none",
+     "resource_evidence": {
+      "resource": "vm-101/snap-x",
+      "client_token": "synch-01JD3QA0000000000000000030"
+     }
+    }
+   }
+  },
+  {
+   "name": "sib: succeeded via response carrying resource evidence",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "external_request.resolved",
+    "type_version": 4,
+    "payload": {
+     "external_request_id": "01JD3QA0000000000000000030",
+     "operation": "snapshot",
+     "resolution": "succeeded",
+     "via": "response",
+     "resource_evidence": {
+      "resource": "vm-101/snap-x",
+      "client_token": "synch-01JD3QA0000000000000000030"
+     }
+    }
+   }
+  },
+  {
+   "name": "sib: T38 from a non-recovery pause",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "thread.state_changed",
+    "type_version": 4,
+    "payload": {
+     "from": "paused",
+     "to": "verifying",
+     "transition": "T38",
+     "from_pause_reason": "operator"
+    }
+   }
+  },
+  {
+   "name": "pos: not_executed via authoritative absence",
+   "schema": "catalogue",
+   "expect": "valid",
+   "base": "thread_event",
+   "data": {
+    "type": "external_request.resolved",
+    "type_version": 4,
+    "payload": {
+     "external_request_id": "01JD3QA0000000000000000030",
+     "operation": "snapshot",
+     "resolution": "not_executed",
+     "via": "provider_task_absent",
+     "absence_lookup": {
+      "client_token": "synch-01JD3QA0000000000000000030",
+      "queried_at": "2026-11-18T10:05:00Z"
+     }
+    }
+   }
+  },
+  {
+   "name": "pos: T38 recovery after a durable normal exit continues to verifying",
+   "schema": "catalogue",
+   "expect": "valid",
+   "base": "thread_event",
+   "data": {
+    "type": "thread.state_changed",
+    "type_version": 4,
+    "payload": {
+     "from": "paused",
+     "to": "verifying",
+     "transition": "T38",
+     "from_pause_reason": "daemon_recovery"
+    }
+   }
+  },
+  {
+   "name": "pos: T21 out of no_eligible_pair before any process started",
+   "schema": "catalogue",
+   "expect": "valid",
+   "base": "thread_event",
+   "data": {
+    "type": "thread.state_changed",
+    "type_version": 4,
+    "payload": {
+     "from": "paused",
+     "to": "queued",
+     "transition": "T21",
+     "from_pause_reason": "no_eligible_pair"
+    }
+   }
+  },
+  {
+   "name": "pos: T21 out of disk_pressure before any process started",
+   "schema": "catalogue",
+   "expect": "valid",
+   "base": "thread_event",
+   "data": {
+    "type": "thread.state_changed",
+    "type_version": 4,
+    "payload": {
+     "from": "paused",
+     "to": "queued",
+     "transition": "T21",
+     "from_pause_reason": "disk_pressure"
+    }
+   }
+  },
+  {
+   "name": "pos: child.assignment_recorded with target and no dependencies",
+   "schema": "catalogue",
+   "expect": "valid",
+   "base": "thread_event",
+   "data": {
+    "type": "child.assignment_recorded",
+    "type_version": 1,
+    "payload": {
+     "parent_thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+     "child_thread_id": "01JD3QB0000000000000000001",
+     "assignment_id": "01JD3QB0000000000000000002",
+     "purpose": "Implement the retry limit in the scheduler",
+     "role": "builder",
+     "role_reason": "Scheduler change needs a code author with write access to internal/sched",
+     "allowed_capabilities": [
+      "fs.write:internal/sched",
+      "exec.go_test"
+     ],
+     "expected_evidence": [
+      "go-test report",
+      "diff of internal/sched"
+     ],
+     "target": "branch room/feat-x"
+    }
+   }
+  },
+  {
+   "name": "pos: child.result_recorded with empty groups",
+   "schema": "catalogue",
+   "expect": "valid",
+   "base": "thread_event",
+   "data": {
+    "type": "child.result_recorded",
+    "type_version": 1,
+    "payload": {
+     "child_thread_id": "01JD3QB0000000000000000001",
+     "assignment_id": "01JD3QB0000000000000000002",
+     "outcome": "completed",
+     "revision": "5977ec186c62ce66b2e1e48051bda521bb7f6b9f",
+     "checks": {
+      "passed": [],
+      "failed": [],
+      "error": [],
+      "partial": [],
+      "not_run": []
+     },
+     "limitations": [],
+     "open_requirements": []
+    }
+   }
+  },
+  {
+   "name": "pos: audit.setting_recorded off with reason",
+   "schema": "catalogue",
+   "expect": "valid",
+   "base": "thread_event",
+   "data": {
+    "type": "audit.setting_recorded",
+    "type_version": 1,
+    "payload": {
+     "thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+     "setting": "off",
+     "reason": "Docs-only change"
+    }
+   }
+  },
+  {
+   "name": "C1-neg: child.assignment_recorded missing role_reason",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "child.assignment_recorded",
+    "type_version": 1,
+    "payload": {
+     "parent_thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+     "child_thread_id": "01JD3QB0000000000000000001",
+     "assignment_id": "01JD3QB0000000000000000002",
+     "purpose": "Implement the retry limit in the scheduler",
+     "role": "builder",
+     "input_revision": "5977ec186c62ce66b2e1e48051bda521bb7f6b9f",
+     "allowed_capabilities": [
+      "fs.write:internal/sched",
+      "exec.go_test"
+     ],
+     "expected_evidence": [
+      "go-test report",
+      "diff of internal/sched"
+     ],
+     "dependencies": [
+      "01JD3QB0000000000000000003"
+     ]
+    }
+   }
+  },
+  {
+   "name": "C1-neg: child.assignment_recorded empty role_reason",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "child.assignment_recorded",
+    "type_version": 1,
+    "payload": {
+     "parent_thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+     "child_thread_id": "01JD3QB0000000000000000001",
+     "assignment_id": "01JD3QB0000000000000000002",
+     "purpose": "Implement the retry limit in the scheduler",
+     "role": "builder",
+     "role_reason": "",
+     "input_revision": "5977ec186c62ce66b2e1e48051bda521bb7f6b9f",
+     "allowed_capabilities": [
+      "fs.write:internal/sched",
+      "exec.go_test"
+     ],
+     "expected_evidence": [
+      "go-test report",
+      "diff of internal/sched"
+     ],
+     "dependencies": [
+      "01JD3QB0000000000000000003"
+     ]
+    }
+   }
+  },
+  {
+   "name": "C1-neg: child.assignment_recorded unknown field",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "child.assignment_recorded",
+    "type_version": 1,
+    "payload": {
+     "parent_thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+     "child_thread_id": "01JD3QB0000000000000000001",
+     "assignment_id": "01JD3QB0000000000000000002",
+     "purpose": "Implement the retry limit in the scheduler",
+     "role": "builder",
+     "role_reason": "Scheduler change needs a code author with write access to internal/sched",
+     "input_revision": "5977ec186c62ce66b2e1e48051bda521bb7f6b9f",
+     "allowed_capabilities": [
+      "fs.write:internal/sched",
+      "exec.go_test"
+     ],
+     "expected_evidence": [
+      "go-test report",
+      "diff of internal/sched"
+     ],
+     "dependencies": [
+      "01JD3QB0000000000000000003"
+     ],
+     "priority": 1
+    }
+   }
+  },
+  {
+   "name": "C1-neg: child.assignment_recorded bad role enum",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "child.assignment_recorded",
+    "type_version": 1,
+    "payload": {
+     "parent_thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+     "child_thread_id": "01JD3QB0000000000000000001",
+     "assignment_id": "01JD3QB0000000000000000002",
+     "purpose": "Implement the retry limit in the scheduler",
+     "role": "coordinator",
+     "role_reason": "Scheduler change needs a code author with write access to internal/sched",
+     "input_revision": "5977ec186c62ce66b2e1e48051bda521bb7f6b9f",
+     "allowed_capabilities": [
+      "fs.write:internal/sched",
+      "exec.go_test"
+     ],
+     "expected_evidence": [
+      "go-test report",
+      "diff of internal/sched"
+     ],
+     "dependencies": [
+      "01JD3QB0000000000000000003"
+     ]
+    }
+   }
+  },
+  {
+   "name": "C1-neg: child.assignment_recorded neither input_revision nor target",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "child.assignment_recorded",
+    "type_version": 1,
+    "payload": {
+     "parent_thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+     "child_thread_id": "01JD3QB0000000000000000001",
+     "assignment_id": "01JD3QB0000000000000000002",
+     "purpose": "Implement the retry limit in the scheduler",
+     "role": "builder",
+     "role_reason": "Scheduler change needs a code author with write access to internal/sched",
+     "allowed_capabilities": [
+      "fs.write:internal/sched",
+      "exec.go_test"
+     ],
+     "expected_evidence": [
+      "go-test report",
+      "diff of internal/sched"
+     ],
+     "dependencies": [
+      "01JD3QB0000000000000000003"
+     ]
+    }
+   }
+  },
+  {
+   "name": "C1-neg: child.assignment_recorded no expected evidence",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "child.assignment_recorded",
+    "type_version": 1,
+    "payload": {
+     "parent_thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+     "child_thread_id": "01JD3QB0000000000000000001",
+     "assignment_id": "01JD3QB0000000000000000002",
+     "purpose": "Implement the retry limit in the scheduler",
+     "role": "builder",
+     "role_reason": "Scheduler change needs a code author with write access to internal/sched",
+     "input_revision": "5977ec186c62ce66b2e1e48051bda521bb7f6b9f",
+     "allowed_capabilities": [
+      "fs.write:internal/sched",
+      "exec.go_test"
+     ],
+     "expected_evidence": [],
+     "dependencies": [
+      "01JD3QB0000000000000000003"
+     ]
+    }
+   }
+  },
+  {
+   "name": "C1-neg: child.assignment_recorded non-ULID child id",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "child.assignment_recorded",
+    "type_version": 1,
+    "payload": {
+     "parent_thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+     "child_thread_id": "child-1",
+     "assignment_id": "01JD3QB0000000000000000002",
+     "purpose": "Implement the retry limit in the scheduler",
+     "role": "builder",
+     "role_reason": "Scheduler change needs a code author with write access to internal/sched",
+     "input_revision": "5977ec186c62ce66b2e1e48051bda521bb7f6b9f",
+     "allowed_capabilities": [
+      "fs.write:internal/sched",
+      "exec.go_test"
+     ],
+     "expected_evidence": [
+      "go-test report",
+      "diff of internal/sched"
+     ],
+     "dependencies": [
+      "01JD3QB0000000000000000003"
+     ]
+    }
+   }
+  },
+  {
+   "name": "C1-neg: child.assignment_recorded parent_thread_id differs from thread_id (C7)",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "child.assignment_recorded",
+    "type_version": 1,
+    "payload": {
+     "parent_thread_id": "01JD3QB0000000000000000001",
+     "child_thread_id": "01JD3QB0000000000000000001",
+     "assignment_id": "01JD3QB0000000000000000002",
+     "purpose": "Implement the retry limit in the scheduler",
+     "role": "builder",
+     "role_reason": "Scheduler change needs a code author with write access to internal/sched",
+     "input_revision": "5977ec186c62ce66b2e1e48051bda521bb7f6b9f",
+     "allowed_capabilities": [
+      "fs.write:internal/sched",
+      "exec.go_test"
+     ],
+     "expected_evidence": [
+      "go-test report",
+      "diff of internal/sched"
+     ],
+     "dependencies": [
+      "01JD3QB0000000000000000003"
+     ]
+    }
+   }
+  },
+  {
+   "name": "C1-neg: child.result_recorded missing checks",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "child.result_recorded",
+    "type_version": 1,
+    "payload": {
+     "child_thread_id": "01JD3QB0000000000000000001",
+     "assignment_id": "01JD3QB0000000000000000002",
+     "outcome": "completed",
+     "revision": "5977ec186c62ce66b2e1e48051bda521bb7f6b9f",
+     "limitations": [
+      "lint covered one package"
+     ],
+     "open_requirements": [
+      "run race tests on a cgo runner"
+     ]
+    }
+   }
+  },
+  {
+   "name": "C1-neg: child.result_recorded checks group missing",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "child.result_recorded",
+    "type_version": 1,
+    "payload": {
+     "child_thread_id": "01JD3QB0000000000000000001",
+     "assignment_id": "01JD3QB0000000000000000002",
+     "outcome": "completed",
+     "revision": "5977ec186c62ce66b2e1e48051bda521bb7f6b9f",
+     "checks": {
+      "passed": [
+       {
+        "check": "go-test"
+       }
+      ],
+      "failed": [],
+      "error": [],
+      "partial": [
+       {
+        "check": "lint",
+        "reason": "only internal/sched linted"
+       }
+      ]
+     },
+     "limitations": [
+      "lint covered one package"
+     ],
+     "open_requirements": [
+      "run race tests on a cgo runner"
+     ]
+    }
+   }
+  },
+  {
+   "name": "C1-neg: child.result_recorded unknown field",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "child.result_recorded",
+    "type_version": 1,
+    "payload": {
+     "child_thread_id": "01JD3QB0000000000000000001",
+     "assignment_id": "01JD3QB0000000000000000002",
+     "outcome": "completed",
+     "revision": "5977ec186c62ce66b2e1e48051bda521bb7f6b9f",
+     "checks": {
+      "passed": [
+       {
+        "check": "go-test"
+       }
+      ],
+      "failed": [],
+      "error": [],
+      "partial": [
+       {
+        "check": "lint",
+        "reason": "only internal/sched linted"
+       }
+      ],
+      "not_run": [
+       {
+        "check": "race",
+        "reason": "runner has no cgo toolchain"
+       }
+      ]
+     },
+     "limitations": [
+      "lint covered one package"
+     ],
+     "open_requirements": [
+      "run race tests on a cgo runner"
+     ],
+     "score": 9
+    }
+   }
+  },
+  {
+   "name": "C1-neg: child.result_recorded bad outcome enum",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "child.result_recorded",
+    "type_version": 1,
+    "payload": {
+     "child_thread_id": "01JD3QB0000000000000000001",
+     "assignment_id": "01JD3QB0000000000000000002",
+     "outcome": "pass",
+     "revision": "5977ec186c62ce66b2e1e48051bda521bb7f6b9f",
+     "checks": {
+      "passed": [
+       {
+        "check": "go-test"
+       }
+      ],
+      "failed": [],
+      "error": [],
+      "partial": [
+       {
+        "check": "lint",
+        "reason": "only internal/sched linted"
+       }
+      ],
+      "not_run": [
+       {
+        "check": "race",
+        "reason": "runner has no cgo toolchain"
+       }
+      ]
+     },
+     "limitations": [
+      "lint covered one package"
+     ],
+     "open_requirements": [
+      "run race tests on a cgo runner"
+     ]
+    }
+   }
+  },
+  {
+   "name": "C1-neg: child.result_recorded unknown checks group",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "child.result_recorded",
+    "type_version": 1,
+    "payload": {
+     "child_thread_id": "01JD3QB0000000000000000001",
+     "assignment_id": "01JD3QB0000000000000000002",
+     "outcome": "completed",
+     "revision": "5977ec186c62ce66b2e1e48051bda521bb7f6b9f",
+     "checks": {
+      "passed": [
+       {
+        "check": "go-test"
+       }
+      ],
+      "failed": [],
+      "error": [],
+      "partial": [
+       {
+        "check": "lint",
+        "reason": "only internal/sched linted"
+       }
+      ],
+      "not_run": [
+       {
+        "check": "race",
+        "reason": "runner has no cgo toolchain"
+       }
+      ],
+      "skipped": []
+     },
+     "limitations": [
+      "lint covered one package"
+     ],
+     "open_requirements": [
+      "run race tests on a cgo runner"
+     ]
+    }
+   }
+  },
+  {
+   "name": "C1-neg: child.result_recorded failed check without reason",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "child.result_recorded",
+    "type_version": 1,
+    "payload": {
+     "child_thread_id": "01JD3QB0000000000000000001",
+     "assignment_id": "01JD3QB0000000000000000002",
+     "outcome": "completed",
+     "revision": "5977ec186c62ce66b2e1e48051bda521bb7f6b9f",
+     "checks": {
+      "passed": [
+       {
+        "check": "go-test"
+       }
+      ],
+      "failed": [
+       {
+        "check": "go-test"
+       }
+      ],
+      "error": [],
+      "partial": [
+       {
+        "check": "lint",
+        "reason": "only internal/sched linted"
+       }
+      ],
+      "not_run": [
+       {
+        "check": "race",
+        "reason": "runner has no cgo toolchain"
+       }
+      ]
+     },
+     "limitations": [
+      "lint covered one package"
+     ],
+     "open_requirements": [
+      "run race tests on a cgo runner"
+     ]
+    }
+   }
+  },
+  {
+   "name": "C1-neg: child.result_recorded empty revision",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "child.result_recorded",
+    "type_version": 1,
+    "payload": {
+     "child_thread_id": "01JD3QB0000000000000000001",
+     "assignment_id": "01JD3QB0000000000000000002",
+     "outcome": "completed",
+     "revision": "",
+     "checks": {
+      "passed": [
+       {
+        "check": "go-test"
+       }
+      ],
+      "failed": [],
+      "error": [],
+      "partial": [
+       {
+        "check": "lint",
+        "reason": "only internal/sched linted"
+       }
+      ],
+      "not_run": [
+       {
+        "check": "race",
+        "reason": "runner has no cgo toolchain"
+       }
+      ]
+     },
+     "limitations": [
+      "lint covered one package"
+     ],
+     "open_requirements": [
+      "run race tests on a cgo runner"
+     ]
+    }
+   }
+  },
+  {
+   "name": "C1-neg: audit.setting_recorded missing reason",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "audit.setting_recorded",
+    "type_version": 1,
+    "payload": {
+     "thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+     "setting": "level2"
+    }
+   }
+  },
+  {
+   "name": "C1-neg: audit.setting_recorded empty reason",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "audit.setting_recorded",
+    "type_version": 1,
+    "payload": {
+     "thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+     "setting": "level2",
+     "reason": ""
+    }
+   }
+  },
+  {
+   "name": "C1-neg: audit.setting_recorded setting default is not a resolved value",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "audit.setting_recorded",
+    "type_version": 1,
+    "payload": {
+     "thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+     "setting": "default",
+     "reason": "Change touches credentials handling, so an independent audit is required"
+    }
+   }
+  },
+  {
+   "name": "C1-neg: audit.setting_recorded unknown field",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "audit.setting_recorded",
+    "type_version": 1,
+    "payload": {
+     "thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+     "setting": "level2",
+     "reason": "Change touches credentials handling, so an independent audit is required",
+     "level": 2
+    }
+   }
+  },
+  {
+   "name": "C1-neg: audit.setting_recorded thread_id differs from envelope (C7)",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "audit.setting_recorded",
+    "type_version": 1,
+    "payload": {
+     "thread_id": "01JD3QB0000000000000000001",
+     "setting": "level2",
+     "reason": "Change touches credentials handling, so an independent audit is required"
+    }
+   }
+  },
+  {
+   "name": "C1-neg: audit.setting_recorded system stream rejected",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "audit.setting_recorded",
+    "type_version": 1,
+    "payload": {
+     "thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+     "setting": "level2",
+     "reason": "Change touches credentials handling, so an independent audit is required"
+    },
+    "stream": "system",
+    "$delete": [
+     "thread_id"
+    ]
+   }
+  }
+ ]
+}

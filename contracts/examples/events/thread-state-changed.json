@@ -1,0 +1,23 @@
+{
+  "envelope_version": 2,
+  "id": "01JD3QA0000000000000000001",
+  "stream": "thread:01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+  "seq": 42,
+  "global_seq": 1017,
+  "type": "thread.state_changed",
+  "type_version": 4,
+  "occurred_at": "2026-11-18T10:15:00.120Z",
+  "recorded_at": "2026-11-18T10:15:00.123Z",
+  "actor": {
+    "kind": "daemon",
+    "id": "synchd"
+  },
+  "thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+  "payload": {
+    "from": "running",
+    "to": "paused",
+    "transition": "T15",
+    "pause_reason": "harness_unavailable",
+    "detail": "claude-code exited 1 during start"
+  }
+}

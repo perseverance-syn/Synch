@@ -1,0 +1,44 @@
+{
+  "policy_version": 3,
+  "id": "example.full-control-inherit-revoke",
+  "source": "operator",
+  "description": "AC7(c): Full Control grant on one thread+host+identity, inherited by children on the same host+identity, then revoked across the subtree (dec. 14).",
+  "rules": [
+    {
+      "id": "host.native.allow-under-grant",
+      "effect": "allow",
+      "actions": [
+        "host.*"
+      ],
+      "match": {
+        "hosts": [
+          "build-01"
+        ],
+        "modes": [
+          "full_control"
+        ]
+      },
+      "reason": "Native host actions are allowed only while an active grant covers thread+host+identity."
+    }
+  ],
+  "grants": [
+    {
+      "id": "grt-0001",
+      "kind": "full_control",
+      "thread": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+      "host": "build-01",
+      "identity": "BUILD-01\\synch-ops",
+      "granted_by": "operator:alice",
+      "granted_at": "2026-11-18T09:00:00Z",
+      "inherit": true
+    }
+  ],
+  "revocations": [
+    {
+      "grant": "grt-0001",
+      "scope": "subtree",
+      "revoked_by": "operator:alice",
+      "revoked_at": "2026-11-18T11:30:00Z"
+    }
+  ]
+}

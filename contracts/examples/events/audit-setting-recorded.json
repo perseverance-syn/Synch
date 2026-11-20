@@ -1,0 +1,20 @@
+{
+  "envelope_version": 2,
+  "id": "01JD3QA0000000000000000005",
+  "stream": "thread:01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+  "seq": 46,
+  "global_seq": 1146,
+  "type": "audit.setting_recorded",
+  "type_version": 1,
+  "recorded_at": "2026-11-18T10:20:00Z",
+  "actor": {
+    "kind": "daemon",
+    "id": "synchd"
+  },
+  "thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+  "payload": {
+    "thread_id": "01JD3Q8Z7Y6X5W4V3T2S1R0QPN",
+    "setting": "level2",
+    "reason": "Change touches credentials handling, so an independent audit is required"
+  }
+}

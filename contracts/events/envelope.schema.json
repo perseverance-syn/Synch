@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://synch.local/contracts/events/envelope/2.0.0",
+  "title": "Synch event envelope v2.0.0 (daemon-persisted form)",
+  "description": "Spec 'Persistent state' (typed, versioned, numbered events persisted before acknowledgement). This is the shape persisted by the daemon. Runner-local events use events/runner-event.schema.json and are mapped on ingest (catalogue.md section 3). This is a producer schema; readers follow README.md 'Compatibility'.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["envelope_version", "id", "stream", "seq", "global_seq", "type", "type_version", "recorded_at", "actor", "payload"],
+  "properties": {
+    "envelope_version": { "const": 2 },
+    "id": { "$ref": "#/$defs/ulid", "description": "Unique event ID. For ingested runner events: the runner-assigned event ID." },
+    "stream": {
+      "type": "string",
+      "pattern": "^(system|thread:[0-9A-HJKMNP-TV-Z]{26})$",
+      "description": "One stream per thread plus one 'system' stream. Runner journals are not daemon streams; their events are ingested into the owning thread stream."
+    },
+    "seq": { "type": "integer", "minimum": 1, "description": "Per-stream sequence. Starts at 1, contiguous, assigned in the persisting transaction." },
+    "global_seq": { "type": "integer", "minimum": 1, "description": "Daemon-wide sequence across all streams. Contiguous. Assigned by the daemon at persistence (also for ingested runner events)." },
+    "type": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$" },
+    "type_version": { "type": "integer", "minimum": 1, "description": "Payload schema major version for this type." },
+    "occurred_at": { "type": "string", "format": "date-time", "description": "When the fact happened at its source (runner clock for ingested events)." },
+    "recorded_at": { "type": "string", "format": "date-time", "description": "When the daemon persisted it." },
+    "actor": { "$ref": "#/$defs/actor" },
+    "thread_id": { "$ref": "#/$defs/ulid" },
+    "request_id": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$", "description": "Client request ID that caused this event, if any (receipts.md)." },
+    "causation_id": { "$ref": "#/$defs/ulid", "description": "Event ID that caused this one." },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runner", "seq"],
+      "description": "Required on events ingested from a runner journal; forbidden otherwise. (runner, seq) is the unique ingest dedup key.",
+      "properties": {
+        "runner": { "$ref": "#/$defs/runner_id" },
+        "seq": { "type": "integer", "minimum": 1, "description": "Runner-local source_seq." }
+      }
+    },
+    "redactions": { "type": "integer", "minimum": 0, "description": "Number of known secret values redacted from the payload before persistence." },
+    "payload": { "type": "object" }
+  },
+  "allOf": [
+    { "if": { "properties": { "actor": { "properties": { "kind": { "const": "runner" } }, "required": ["kind"] } }, "required": ["actor"] },
+      "then": { "required": ["source", "occurred_at"] },
+      "else": { "not": { "required": ["source"] } } },
+    { "if": { "properties": { "stream": { "pattern": "^thread:" } }, "required": ["stream"] },
+      "then": { "required": ["thread_id"] } }
+  ],
+  "$defs": {
+    "ulid": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" },
+    "runner_id": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$" },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": { "enum": ["operator", "daemon", "coordinator", "agent", "runner", "driver", "client"] },
+        "id": { "type": "string", "minLength": 1 },
+        "machine": { "type": "string", "description": "Host the actor acted on/from (spec 'Evidence and diagnostics')." }
+      }
+    }
+  }
+}

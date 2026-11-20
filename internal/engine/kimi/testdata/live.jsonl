@@ -1,0 +1,26 @@
+{"expect":{"jsonrpc":"2.0","id":"1","method":"initialize","params":{"protocolVersion":1,"clientCapabilities":{},"clientInfo":{"name":"synch","version":"0.1.0"}}}}
+{"send":{"jsonrpc":"2.0","id":"1","result":{"protocolVersion":1,"agentCapabilities":{"mcpCapabilities":{"http":true}}}}}
+{"expect":{"jsonrpc":"2.0","id":"2","method":"session/new","params":{"cwd":"$cwd","mcpServers":[{"type":"http","name":"synch","url":"http://localhost:12345/mcp","headers":[]}]}}}
+{"send":{"jsonrpc":"2.0","id":"2","result":{"sessionId":"kimi-1"}}}
+{"expect":{"jsonrpc":"2.0","id":"3","method":"session/set_config_option","params":{"sessionId":"kimi-1","configId":"model","value":"test-model"}}}
+{"send":{"jsonrpc":"2.0","id":"3","result":{"configOptions":[]}}}
+{"expect":{"jsonrpc":"2.0","id":"4","method":"session/prompt","params":{"sessionId":"kimi-1","prompt":[{"type":"text","text":"stable\n\nSkill \"example\" (sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824)\nhello\n\nchanging"}]}}}
+{"send":{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"other","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"ignore wrong session"}}}}}
+{"send":{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"kimi-1","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"first"}}}}}
+{"send":{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"kimi-1","update":{"sessionUpdate":"tool_call","toolCallId":"call-1","title":"Read","status":"pending","content":[{"type":"content","content":{"type":"text","text":"Reading brief.txt"}}]}}}}
+{"send":{"jsonrpc":"2.0","id":11,"method":"session/request_permission","params":{"sessionId":"kimi-1","toolCall":{"toolCallId":"call-1"},"options":[]}}}
+{"expect":{"jsonrpc":"2.0","id":11,"result":{"outcome":{"outcome":"cancelled"}}}}
+{"mark":"interrupt"}
+{"expect":{"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":"kimi-1"}}}
+{"send":{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"kimi-1","update":{"sessionUpdate":"tool_call_update","toolCallId":"call-1","status":"failed","content":[{"type":"content","content":{"type":"text","text":"Read cancelled"}}]}}}}
+{"send":{"jsonrpc":"2.0","id":"4","result":{"stopReason":"cancelled"}}}
+{"send":{"jsonrpc":"2.0","id":12,"method":"session/request_permission","params":{"sessionId":"kimi-1","toolCall":{"toolCallId":"call-1"},"options":[]}}}
+{"expect":{"jsonrpc":"2.0","id":12,"result":{"outcome":{"outcome":"cancelled"}}}}
+{"mark":"next"}
+{"expect":{"jsonrpc":"2.0","id":"5","method":"session/prompt","params":{"sessionId":"kimi-1","prompt":[{"type":"text","text":"follow-up"}]}}}
+{"send":{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"kimi-1","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"second"}}}}}
+{"send":{"jsonrpc":"2.0","id":"5","result":{"stopReason":"end_turn"}}}
+{"send":{"jsonrpc":"2.0","id":13,"method":"session/request_permission","params":{"sessionId":"kimi-1","toolCall":{"toolCallId":"call-1"},"options":[]}}}
+{"expect":{"jsonrpc":"2.0","id":13,"result":{"outcome":{"outcome":"cancelled"}}}}
+{"mark":"complete"}
+{"hold":true}

@@ -1,0 +1,8 @@
+> {"method":"initialize","id":1,"params":{"clientInfo":{"name":"synch","title":"Synch","version":"0.1.0"}}}
+< {"id":1,"result":{"userAgent":"synch/0.169.0","platformFamily":"unix","platformOs":"linux"}}
+> {"method":"initialized","params":{}}
+> {"method":"thread/start","id":2,"params":{"model":"example-model","cwd":"/workspace"}}
+< {"id":2,"result":{"thread":{"id":"thr_bad"}}}
+> {"method":"turn/start","id":3,"params":{"threadId":"thr_bad","input":[{"type":"text","text":"Stable brief\n\nSkill \"review\" (sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824)\nhello\n\nChanging assignment"}]}}
+< {"id":3,"result":{"turn":{"id":"turn_bad","items":[],"status":"inProgress","error":null}}}
+< {"method":"item/agentMessage/delta","params":{"threadId":"thr_bad","turnId":"turn_bad","itemId":"msg","delta":23}}

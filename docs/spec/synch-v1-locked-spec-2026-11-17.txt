@@ -1,0 +1,164 @@
+RELEASE SCOPE AND AUTHORITY
+[Title] Synch V1 locked specification
+17 November 2026   /   Consolidated decision record
+Synch runs coordinated agent work on machines the operator owns. The operator gives one task to a coordinator, chooses the access it may use, and reviews changes against recorded evidence. The expanded first release includes the operational workflows and owned-machine management.
+[Heading2] Product ownership
+Codex and Claude development agents may implement all seven core components. The owner controls requirements and accepts changes. Each component receives automated verification and a fresh independent review. This replaces the earlier handwritten-core restriction.
+[Heading2] Release surface
+The Windows-first desktop is the primary interface. An always-on machine can host the core independently. A complete CLI supports operators who prefer a terminal, including initial setup. Desktop and CLI share an authenticated API.
+[Heading2] Integration scope
+V1 targets Codex, Claude Code and Kimi Code CLI. Its provider layer covers Proxmox VE, VMware ESXi, VMware Workstation, Oracle VirtualBox and Microsoft Hyper-V. Its CI layer covers GitHub Actions, GitLab CI and Jenkins.
+[Heading2] Reading the record
+Pages 2–6 consolidate the architecture and workflows. Pages 7–10 record all 24 selections, including the operator’s amendments. Page 11 identifies release evidence and the boundary between settled requirements and implementation work.
+[Heading2] Precedence
+This is the dated companion to Synch locked specification of 15 November 2026. The later decisions recorded here govern conflicts. The earlier document supplies the detailed baseline where these decisions leave it intact. Every capability described here is a requirement for delivery.
+CORE AND CLIENTS
+[Heading1] Core architecture
+The daemon owns task state even when every client is disconnected.
+[Heading2] Seven agent-written components
+1. Process supervisor. 2. Append-only event log. 3. Engine interface and first adapter. 4. Thread states and request queue, including rollover. 5. Local API. 6. Execution-driver interface and Direct driver. 7. Policy evaluation before mediated actions.
+[Heading2] Runtime and clients
+Go supplies one binary with daemon, runner and agent CLI entry points. The daemon runs as a service and can start at boot. The desktop uses Electron, React, TypeScript, Vite, TanStack Query and Radix. It presents projects, thread trees, live output, diffs, approvals, findings, machines and settings.
+[Heading2] Persistent state
+Use SQLite in WAL mode. Persist typed, versioned, numbered events before acknowledging them. HTTP commands and Server-Sent Events use loopback and caller-specific tokens. Clients reconnect from the last sequence they received. Migration, backup and restore require tests.
+[Heading2] Command semantics
+Persist a client request ID with its payload identity and result. A retry with the same ID and payload returns the existing receipt. A changed payload conflicts. Keep acceptance, delivery and execution outcomes distinct from test results, audit findings and human approval.
+[Heading2] Supervision and failure
+Own process I/O, cancellation and descendant cleanup, using Job Objects on Windows. Closing the desktop leaves the daemon running. On exit, stall or reboot, preserve output and distinguish resumable from lost work. Under disk pressure, pause new work while retaining control and recovery access.
+[Heading2] Extension points
+Keep engine, execution, VM and scanner drivers behind versioned contracts. Role definitions package instructions, tools and policy. Skills carry reusable instructions. The daemon exposes agent tools through MCP. Loading a skill or role cannot increase a thread’s authority.
+TASK EXECUTION
+[Heading1] Coordination and specialist capabilities
+One task has one accepted brief and a shared plan. The operator chooses access. The coordinator assigns specialities.
+[Heading2] Coordinator
+Break the brief into steps, record dependencies, assign work, combine findings and revise within scope. The daemon owns the durable plan, dispatch, limits, permissions, approvals and completion checks. The coordinator can inspect evidence and request work without receiving a shell or infrastructure credentials.
+[Heading2] Builder
+Implement code, tests and manifests in a thread workspace. Inspect diffs and rendered artifacts, identify untested items and prepare a pull request. For documents, render to PDF and inspect every page. Use scripted captures when visual evidence is required.
+[Heading2] Ops
+Own infrastructure outcomes, including diagnosis, pipeline edits, infrastructure as code, deployments, recovery and verification. Before a real change, state its target, purpose, failure modes and rollback. Keep runbooks, monitoring and tested restores alongside infrastructure definitions.
+[Heading2] Security
+Triage findings, compare configurations with approved baselines, assess exposure and verify remediation. Record reasons for false positives. Request a Builder fix when appropriate. Applying network or production changes is an approved Ops action. Defensive scan and review workflows use trusted inputs in Direct execution.
+[Heading2] Independent audit
+A fresh agent compares deliverables with the accepted brief and evidence. Level 1 covers declared deliverables and checks. Level 2 maps each criterion to evidence. Level 3 challenges design, failure recovery and operational assumptions. The auditor can request correction. A human accepts the change.
+[Heading2] Child work
+Give each child a focused assignment, input revision, capabilities and expected evidence. Use separate workspaces for independent edits. Collect outcome, revision, checks, limitations and open requirements. Cancel managed children with their parent. The daemon enforces depth, concurrency and retry limits and frees a waiting parent’s execution slot.
+WORKING CONTEXT
+[Heading1] Knowledge and engine continuity
+Synch gives each assignment the facts it needs and keeps the full record accessible for inspection.
+[Heading2] Project memory
+The daemon stores the confirmed brief and canonical task state. PLAN.md, STATUS.md and CONVENTIONS.md provide readable working memory with explicit ownership. Keep one prompt file per child. A changed requirement creates a new brief version and invalidates dependent reviews.
+[Heading2] Role knowledge
+Builder gets repository conventions, interfaces and test commands. Ops gets topology, registered targets, health evidence and recovery procedures. Security gets trust boundaries, baselines, findings and approved exceptions. Link observations to a source and time. Treat changes to standing guidance as proposals for operator acceptance.
+[Heading2] Context controls
+Load guidance by role, project and target. Put stable instructions first. Cap output from Synch tools, retain the full output on disk and return relevant excerpts and a searchable reference. Parse long reports locally. Prefer structured records to screenshots when both support the task. The daemon waits for jobs and wakes agents when a decision or result matters.
+[Heading2] Rollover and handoff
+At a safe checkpoint, persist the brief version, plan, revision, pending edits, failed attempts, open decisions and uncertain external request IDs. A new session can continue the thread from these records. Switching harnesses transfers the task through its handoff files. Live migration of running processes and identical native chat transfer are outside the agreed guarantee.
+[Heading2] Verification and measurement
+Reuse results only while their source revision, configuration and tool versions match. Compare context rules on and off using repeat runs on the same tasks and model. Count children, audits, retries and rollovers. Record success and missed facts. Use token measures only where reported. Enforce directly observable limits such as workers, attempts and elapsed time.
+[Heading2] Harness capabilities
+Version each adapter’s tested capabilities, including start, send, streaming, interruption, stop, native resume, usage reporting and tool interception. Record unavailable operations and the selected harness/model. An operator pin applies to the assignment. An unavailable harness pauses it for an operator-selected replacement.
+AUTHORITY AND INFRASTRUCTURE
+[Heading1] Access and owned machines
+The access choice applies to a specific thread and target. The operator can request a change from either client while a task is running.
+[Heading2] Sandbox
+Run one sandboxed task in a disposable VM. Expose this mode only on a configuration where tests establish filesystem, credential and network boundaries. Provider support and Sandbox certification have separate evidence.
+[Heading2] Provider
+Drivers hold infrastructure credentials and mediate operations on VMs created by the thread or explicitly assigned by the operator. Listing a machine establishes visibility. Authority to change it requires assignment or creation ownership.
+[Heading2] Full Control and mode changes
+Full Control grants native access on the named host under the selected account. Direct execution is displayed as host access. A child inherits the parent’s active grant for that host and identity. Revoking the grant revokes inherited access. At a switch, pause new dispatches and settle active work. Confirm host processes have stopped before reporting Sandbox active. Record the actor, time, target and modes. A downgrade cannot undo prior effects.
+[Heading2] Machine providers
+Each of the five hypervisors has a driver and real-host capability matrix. One core can manage heterogeneous endpoints. Track resource ownership, VM limits and lifecycle, reconcile orphaned resources, and verify snapshots before relying on them. Keep or discard lab resources explicitly when closing a workspace.
+[Heading2] Remote execution
+Register SSH targets with allowed operations. Verify host keys and review unexpected changes. Use a brokered SSH agent and disable forwarding unless granted. A remote runner owns the process and stores numbered events. Reconnect and replay after a disconnect. Work can continue while a laptop sleeps when execution resides on an available remote machine.
+[Heading2] Policy and credentials
+Use allow, deny and ask on mediated actions. Keep user and thread credentials separate. Store secrets in the OS keychain with an age-encrypted fallback. Broker secrets at use and redact known values from supported inputs, outputs, storage and exports. Direct native actions can exceed journal coverage. Show that limit and keep infrastructure credentials outside worker identities where enforcement is required.
+OPERATIONAL WORKFLOWS
+[Heading1] Changes checks and evidence
+The task closes against named requirements and recorded outcomes. A passing check, an independent audit and a human decision are distinct records.
+[Heading2] Project and Git
+Register the project path, branch and conventions. Give each writing thread its own branch and working copy. Fetch and reconcile before pushing. Preserve conflicts and report them. Deny destructive Git operations on mediated paths, scan Synch commits for secrets and use remote branch protection where applicable.
+[Heading2] Gate runner and CI
+Keep ordered checks, thresholds and report parsers in the repository. Run them locally and integrate the same definition with GitHub Actions, GitLab CI and Jenkins. Surface errors and partial imports. A malformed or unsupported report cannot produce a pass.
+[Heading2] Findings and fixes
+Use checksum-verified Trivy and Gitleaks programs. Normalize tool/version, rule, severity, component, location and evidence. Group duplicates while retaining provenance. Security triages a finding, Builder prepares a fix and the daemon reruns the named checks on the exact revision. Record failed attempts and open a reviewable change with before/after evidence.
+[Heading2] Operational proposals
+For production, firewall and network changes, bind human approval to the target and the exact plan. Include a rollback command or verified checkpoint. State which external effects a rollback cannot undo. Validate in a disposable environment when available, and label checks the environment could not run.
+[Heading2] Evidence and diagnostics
+Export redacted evidence with a hash manifest, including findings, revision/diff, named checks, audit, approvals and journal excerpts. Record mediated commands and denials with actor, machine and outcome. Separate durable task history and evidence from bounded process diagnostics. Direct-mode evidence has the integrity limits of its host account.
+[Heading2] Accurate status
+Show passed, failed, error, partial or not run for checks. Show audit status and approval separately. Changed inputs invalidate dependent evidence. Keep failed and untested results, with reasons, visible to the operator.
+DECISION REGISTER
+[Heading1] Planning and authority
+Decisions 01 to 06
+[Heading2] 01 · C   Starting work
+Tasks start automatically within existing permissions. The operator can select Review plan first for an individual task. Plan review does not waive action-specific approvals.
+[Heading2] 02 · B   Revising the plan
+The coordinator can add diagnostics, reorder steps and involve another specialist within the agreed scope. A new target, broader access, a changed acceptance criterion or a higher operator-set execution limit requires an operator decision.
+[Heading2] 03 · C   Routing assignments
+Choose among eligible Codex, Claude Code and Kimi harness/model pairs using tested capabilities, operator permissions and routing evidence. Use the configured default until there is a justified alternative. Honour a manual pin. Pause when no permitted pair qualifies.
+[Heading2] 04 · B   Resolving disagreement
+Pause the affected step and request a check that can resolve the issue. Resume if evidence settles it. Send unresolved material risk to the operator. Independent work can continue.
+[Heading2] 05 · A   Coordinator authority
+The coordinator proposes and revises plans, assigns work and inspects results. Only the daemon dispatches actions. The coordinator has no shell, host credentials or approval token.
+[Heading2] 06 · A   Selecting specialists
+Assign Builder, Ops or Security according to the required outcome and record why each is involved. Run independent work concurrently. A one-specialist task is valid.
+DECISION REGISTER
+[Heading1] Harnesses knowledge and isolation
+Decisions 07 to 12
+[Heading2] 07 · B   Harness failure
+If the selected harness fails, pause the affected assignment and let the operator choose a replacement. Preserve its checkpoint and reconcile outstanding external actions before resuming. Automatic routing applies when selecting an eligible pair for an assignment.
+[Heading2] 08 · B   Audit defaults
+Independent audit defaults off for routine work and on for infrastructure, security and deployment changes. Set audit per task and show its actual status. Named tests, policy checks and required approvals still apply.
+[Heading2] 09 · A   Specialist context
+Deliver the relevant brief, assignment, criteria, decisions, revision or target, allowed actions, knowledge and evidence references. Specialists can retrieve additional material on demand.
+[Heading2] 10 · A   Durable knowledge
+Agents can record observations immediately with their sources. Changes to accepted conventions, architecture decisions and runbooks require operator acceptance.
+[Heading2] 11 · A   Evidence for model preference
+Compare eligible pairs against the default on representative held-out tasks of the same kind. Judge satisfied requirements and critical mistakes first. Keep the default when the comparison is inconclusive. Record the routing reason.
+[Heading2] 12 · A   Sandbox qualification
+Use a dedicated disposable VM per sandboxed task. Verify filesystem, credential and network restrictions on each configuration advertised for Sandbox. All five hypervisors remain within V1 management scope.
+DECISION REGISTER
+[Heading1] Host access and recovery
+Decisions 13 to 18
+[Heading2] 13 · A   Provider scope
+The thread can manage VMs it creates and existing VMs explicitly assigned to it. Inventory access alone confers no mutation rights.
+[Heading2] 14 · A amended   Full Control inheritance
+An operator grant binds Full Control to one thread and one host until revoked or the thread ends. Children inherit the active grant on that host under the same account. A different host or identity requires its own grant. Revocation applies throughout the inheriting subtree.
+[Heading2] 15 · A   Disconnected runners
+A runner may finish previously dispatched work within its grant and record events locally. New assignments and actions that require fresh approval wait for reconnection.
+[Heading2] 16 · A   Remote operator access
+The core listens on loopback by default. Remote desktop and CLI clients connect through SSH and authenticate to Synch with their caller credentials.
+[Heading2] 17 · A   Hypervisor acceptance
+For each supported platform and version, publish a tested capability matrix. On a real host verify inventory, create from a supported base, start, stop and delete a disposable VM. Test each additional claimed operation, including snapshot and restore when advertised.
+[Heading2] 18 · A   Uncertain operations
+Persist the request before dispatch. After a disconnect, reconcile using the provider task or resulting resource. If the outcome is still unknown, pause that operation for reconciliation. A lost response must never cause blind repeat execution.
+DECISION REGISTER
+[Heading1] CI approvals and delivery
+Decisions 19 to 24
+[Heading2] 19 · B   CI coverage
+Deliver the local gate runner plus GitHub Actions, GitLab CI and Jenkins in V1. Preserve equivalent check definitions, thresholds and outcome reporting across claimed integrations.
+[Heading2] 20 · A   Bounded approval
+The operator may approve a bounded plan. Record the approver, thread, exact revision or plan digest, target, permitted actions and expiry. A changed diff, target or scope voids the approval.
+[Heading2] 21 · A   Merge and deployment
+Builder prepares the branch and evidence. Human acceptance applies to the exact revision before merge. Deployment requires its own target-specific approval.
+[Heading2] 22 · B amended   Desktop and CLI
+Make the desktop the primary onboarding and operating experience. The headless core requires no GUI. An operator who prefers the terminal can complete the same operations through the CLI, including initial setup. Both clients call the same authenticated API.
+[Heading2] 23 · A   Harness qualification
+For Codex, Claude Code and Kimi Code CLI, run a real authenticated task on each claimed execution OS. Verify start, output, interruption, recovery and handoff. Advertise optional capabilities only after they pass.
+[Heading2] 24 · A   Coordinator qualification
+Deliberately omit a requirement, select a wrong target, present stale approval, repeat a dispatch, create a specialist disagreement and lose a runner response. Verify the expected block, recovery or visible unresolved state in each case.
+IMPLEMENTATION REFERENCE
+[Heading1] Release evidence and remaining detail
+The product decisions above are locked. The implementation team must still produce the contracts, tests and evidence that satisfy them.
+[Heading2] Core and workspace checks
+Run Go tests, race checks, vet and lint on the core, then review in a fresh session. Retain findings. Demonstrate that three threads can edit one file on separate branches without silent loss. Kill the desktop during work, reconnect and verify history. Force rollover and confirm the task continues.
+[Heading2] Cross-component checks
+Submit one real task from the desktop to the headless core and a live harness. Close the desktop and recover the thread in the CLI. Test child cancellation, limits, result delivery and handoff to another harness. Separate adapter fixtures from authenticated end-to-end evidence.
+[Heading2] Decision and access checks
+Plant a missing requirement and ensure it is visible. Change a revision or target and verify stale approval is refused. Exercise mode switching with an active child and a running process. Verify inherited Host grants are revoked before a downgrade is shown as complete. Verify known test secrets stay out of supported prompts, journals and exports.
+[Heading2] Machine and workflow checks
+Lose the response to a snapshot request and demonstrate reconciliation on each driver claiming snapshots. Close the operator laptop while an owned runner works, then replay the missing events. Trace a failed static CI gate through fix, rerun, audit where enabled and human acceptance.
+[Heading2] Details for implementation
+Specify API payloads and state transitions, adapter protocols, supported OS and version matrices, credential setup, provider-specific operations, VM isolation configurations and benchmark fixtures. Stage 0 must check harness integration terms and supported versions. Keep proposed task assignments for development agents separate from product requirements.
+[Heading2] Scope reference
+Use the 15 November baseline for remaining data-model detail, benchmark protocol and reliability targets, including a responsive 20-thread display and a 200 ms live-output target measured from daemon receipt. Generic ACP expansion, live session migration, recurring automation and advanced memory remain outside the confirmed V1 commitments.

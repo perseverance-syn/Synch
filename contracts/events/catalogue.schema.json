@@ -1,0 +1,2920 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://synch.local/contracts/events/catalogue/4.1.0",
+ "title": "Synch event catalogue v4.1.0",
+ "description": "An event = envelope + type-specific payload. Producer schema: rejects unknown types and fields. Readers follow README.md 'Compatibility'. Meanings and spec citations: catalogue.md.",
+ "allOf": [
+  {
+   "$ref": "https://synch.local/contracts/events/envelope/2.0.0"
+  },
+  {
+   "oneOf": [
+    {
+     "$ref": "#/$defs/e_thread_created"
+    },
+    {
+     "$ref": "#/$defs/e_thread_state_changed"
+    },
+    {
+     "$ref": "#/$defs/e_brief_version_accepted"
+    },
+    {
+     "$ref": "#/$defs/e_plan_revised"
+    },
+    {
+     "$ref": "#/$defs/e_request_accepted"
+    },
+    {
+     "$ref": "#/$defs/e_assignment_dispatched"
+    },
+    {
+     "$ref": "#/$defs/e_assignment_delivered"
+    },
+    {
+     "$ref": "#/$defs/e_engine_output"
+    },
+    {
+     "$ref": "#/$defs/e_engine_usage"
+    },
+    {
+     "$ref": "#/$defs/e_engine_capability_unavailable"
+    },
+    {
+     "$ref": "#/$defs/e_process_exited"
+    },
+    {
+     "$ref": "#/$defs/e_check_result"
+    },
+    {
+     "$ref": "#/$defs/e_audit_status"
+    },
+    {
+     "$ref": "#/$defs/e_audit_setting_recorded"
+    },
+    {
+     "$ref": "#/$defs/e_child_assignment_recorded"
+    },
+    {
+     "$ref": "#/$defs/e_child_result_recorded"
+    },
+    {
+     "$ref": "#/$defs/e_finding_recorded"
+    },
+    {
+     "$ref": "#/$defs/e_approval_recorded"
+    },
+    {
+     "$ref": "#/$defs/e_approval_voided"
+    },
+    {
+     "$ref": "#/$defs/e_acceptance_recorded"
+    },
+    {
+     "$ref": "#/$defs/e_grant_issued"
+    },
+    {
+     "$ref": "#/$defs/e_grant_revoked"
+    },
+    {
+     "$ref": "#/$defs/e_policy_decided"
+    },
+    {
+     "$ref": "#/$defs/e_external_request_persisted"
+    },
+    {
+     "$ref": "#/$defs/e_external_request_task_bound"
+    },
+    {
+     "$ref": "#/$defs/e_external_request_resolved"
+    },
+    {
+     "$ref": "#/$defs/e_rollover_checkpointed"
+    },
+    {
+     "$ref": "#/$defs/e_mode_changed"
+    },
+    {
+     "$ref": "#/$defs/e_resource_pressure"
+    },
+    {
+     "$ref": "#/$defs/e_runner_connection"
+    }
+   ]
+  }
+ ],
+ "$defs": {
+  "ulid": {
+   "type": "string",
+   "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+  },
+  "sha256": {
+   "type": "string",
+   "pattern": "^sha256:[0-9a-f]{64}$"
+  },
+  "on_thread": {
+   "type": "object",
+   "required": [
+    "stream",
+    "thread_id"
+   ],
+   "properties": {
+    "stream": {
+     "type": "string",
+     "pattern": "^thread:"
+    }
+   }
+  },
+  "on_system": {
+   "type": "object",
+   "required": [
+    "stream"
+   ],
+   "properties": {
+    "stream": {
+     "const": "system"
+    }
+   }
+  },
+  "thread_state": {
+   "enum": [
+    "draft",
+    "plan_review",
+    "queued",
+    "running",
+    "waiting_children",
+    "awaiting_decision",
+    "paused",
+    "rollover",
+    "verifying",
+    "awaiting_acceptance",
+    "completed",
+    "failed",
+    "cancelled"
+   ]
+  },
+  "non_terminal": {
+   "enum": [
+    "draft",
+    "plan_review",
+    "queued",
+    "running",
+    "waiting_children",
+    "awaiting_decision",
+    "paused",
+    "rollover",
+    "verifying",
+    "awaiting_acceptance"
+   ]
+  },
+  "pause_reason": {
+   "enum": [
+    "operator",
+    "harness_unavailable",
+    "no_eligible_pair",
+    "disk_pressure",
+    "reconciliation",
+    "disagreement",
+    "mode_switch",
+    "runner_disconnected",
+    "daemon_recovery"
+   ]
+  },
+  "check_status": {
+   "enum": [
+    "passed",
+    "failed",
+    "error",
+    "partial",
+    "not_run"
+   ]
+  },
+  "ref": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "uri",
+    "digest"
+   ],
+   "properties": {
+    "uri": {
+     "type": "string",
+     "minLength": 1
+    },
+    "digest": {
+     "$ref": "#/$defs/sha256"
+    }
+   }
+  },
+  "e_thread_created": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_thread"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "thread.created"
+    },
+    "type_version": {
+     "const": 1
+    },
+    "payload": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "thread_id",
+      "project_id",
+      "role",
+      "depth"
+     ],
+     "properties": {
+      "thread_id": {
+       "$ref": "#/$defs/ulid"
+      },
+      "project_id": {
+       "type": "string",
+       "minLength": 1
+      },
+      "parent_thread_id": {
+       "$ref": "#/$defs/ulid"
+      },
+      "role": {
+       "enum": [
+        "coordinator",
+        "builder",
+        "ops",
+        "security",
+        "auditor"
+       ]
+      },
+      "review_plan_first": {
+       "type": "boolean"
+      },
+      "depth": {
+       "type": "integer",
+       "minimum": 0
+      }
+     }
+    }
+   }
+  },
+  "e_thread_state_changed": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_thread"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "thread.state_changed"
+    },
+    "type_version": {
+     "const": 4
+    },
+    "payload": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "from",
+      "to",
+      "transition"
+     ],
+     "properties": {
+      "from": {
+       "$ref": "#/$defs/thread_state"
+      },
+      "to": {
+       "$ref": "#/$defs/thread_state"
+      },
+      "transition": {
+       "type": "string",
+       "pattern": "^T[0-9]{2}$"
+      },
+      "pause_reason": {
+       "$ref": "#/$defs/pause_reason",
+       "description": "Required iff to=paused."
+      },
+      "from_pause_reason": {
+       "$ref": "#/$defs/pause_reason",
+       "description": "Required iff from=paused."
+      },
+      "interrupted_state": {
+       "enum": [
+        "running",
+        "rollover",
+        "verifying"
+       ],
+       "description": "T24 only: state the daemon found on restart."
+      },
+      "detail": {
+       "type": "string"
+      }
+     },
+     "allOf": [
+      {
+       "if": {
+        "properties": {
+         "to": {
+          "const": "paused"
+         }
+        }
+       },
+       "then": {
+        "required": [
+         "pause_reason"
+        ]
+       },
+       "else": {
+        "not": {
+         "required": [
+          "pause_reason"
+         ]
+        }
+       }
+      },
+      {
+       "if": {
+        "properties": {
+         "from": {
+          "const": "paused"
+         }
+        }
+       },
+       "then": {
+        "required": [
+         "from_pause_reason"
+        ]
+       },
+       "else": {
+        "not": {
+         "required": [
+          "from_pause_reason"
+         ]
+        }
+       }
+      },
+      {
+       "if": {
+        "properties": {
+         "transition": {
+          "const": "T24"
+         }
+        }
+       },
+       "then": {
+        "required": [
+         "interrupted_state"
+        ]
+       },
+       "else": {
+        "not": {
+         "required": [
+          "interrupted_state"
+         ]
+        }
+       }
+      }
+     ],
+     "oneOf": [
+      {
+       "properties": {
+        "transition": {
+         "const": "T01"
+        },
+        "from": {
+         "const": "draft"
+        },
+        "to": {
+         "const": "queued"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T02"
+        },
+        "from": {
+         "const": "draft"
+        },
+        "to": {
+         "const": "plan_review"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T03"
+        },
+        "from": {
+         "const": "plan_review"
+        },
+        "to": {
+         "const": "queued"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T04"
+        },
+        "from": {
+         "const": "plan_review"
+        },
+        "to": {
+         "const": "draft"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T05"
+        },
+        "from": {
+         "const": "queued"
+        },
+        "to": {
+         "const": "running"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T06"
+        },
+        "from": {
+         "const": "queued"
+        },
+        "to": {
+         "const": "paused"
+        },
+        "pause_reason": {
+         "const": "no_eligible_pair"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T07"
+        },
+        "from": {
+         "const": "queued"
+        },
+        "to": {
+         "const": "paused"
+        },
+        "pause_reason": {
+         "const": "disk_pressure"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T08"
+        },
+        "from": {
+         "const": "running"
+        },
+        "to": {
+         "const": "waiting_children"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T09"
+        },
+        "from": {
+         "const": "waiting_children"
+        },
+        "to": {
+         "const": "queued"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T10"
+        },
+        "from": {
+         "const": "running"
+        },
+        "to": {
+         "const": "awaiting_decision"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T11"
+        },
+        "from": {
+         "const": "awaiting_decision"
+        },
+        "to": {
+         "const": "queued"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T12"
+        },
+        "from": {
+         "const": "awaiting_decision"
+        },
+        "to": {
+         "const": "failed"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T13"
+        },
+        "from": {
+         "const": "running"
+        },
+        "to": {
+         "const": "rollover"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T14"
+        },
+        "from": {
+         "const": "rollover"
+        },
+        "to": {
+         "const": "queued"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T15"
+        },
+        "from": {
+         "const": "running"
+        },
+        "to": {
+         "const": "paused"
+        },
+        "pause_reason": {
+         "const": "harness_unavailable"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T16"
+        },
+        "from": {
+         "const": "running"
+        },
+        "to": {
+         "const": "paused"
+        },
+        "pause_reason": {
+         "const": "reconciliation"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T17"
+        },
+        "from": {
+         "const": "running"
+        },
+        "to": {
+         "const": "paused"
+        },
+        "pause_reason": {
+         "const": "disagreement"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T18"
+        },
+        "from": {
+         "const": "running"
+        },
+        "to": {
+         "const": "paused"
+        },
+        "pause_reason": {
+         "const": "mode_switch"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T19"
+        },
+        "from": {
+         "const": "running"
+        },
+        "to": {
+         "const": "paused"
+        },
+        "pause_reason": {
+         "const": "runner_disconnected"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T20"
+        },
+        "from": {
+         "const": "running"
+        },
+        "to": {
+         "const": "paused"
+        },
+        "pause_reason": {
+         "const": "operator"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T21"
+        },
+        "from": {
+         "const": "paused"
+        },
+        "to": {
+         "const": "queued"
+        },
+        "from_pause_reason": {
+         "enum": [
+          "operator",
+          "harness_unavailable",
+          "no_eligible_pair",
+          "disk_pressure",
+          "reconciliation",
+          "disagreement",
+          "mode_switch",
+          "runner_disconnected"
+         ]
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T22"
+        },
+        "from": {
+         "const": "paused"
+        },
+        "to": {
+         "const": "queued"
+        },
+        "from_pause_reason": {
+         "const": "daemon_recovery"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T23"
+        },
+        "from": {
+         "const": "paused"
+        },
+        "to": {
+         "const": "paused"
+        },
+        "from_pause_reason": {
+         "enum": [
+          "operator",
+          "no_eligible_pair",
+          "disk_pressure",
+          "reconciliation",
+          "disagreement",
+          "mode_switch",
+          "runner_disconnected",
+          "daemon_recovery"
+         ]
+        },
+        "pause_reason": {
+         "const": "harness_unavailable"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T24"
+        },
+        "from": {
+         "const": "running"
+        },
+        "to": {
+         "const": "paused"
+        },
+        "pause_reason": {
+         "const": "daemon_recovery"
+        },
+        "interrupted_state": {
+         "const": "running"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T24"
+        },
+        "from": {
+         "const": "rollover"
+        },
+        "to": {
+         "const": "paused"
+        },
+        "pause_reason": {
+         "const": "daemon_recovery"
+        },
+        "interrupted_state": {
+         "const": "rollover"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T24"
+        },
+        "from": {
+         "const": "verifying"
+        },
+        "to": {
+         "const": "paused"
+        },
+        "pause_reason": {
+         "const": "daemon_recovery"
+        },
+        "interrupted_state": {
+         "const": "verifying"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T25"
+        },
+        "from": {
+         "const": "running"
+        },
+        "to": {
+         "const": "verifying"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T26"
+        },
+        "from": {
+         "const": "verifying"
+        },
+        "to": {
+         "const": "awaiting_acceptance"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T27"
+        },
+        "from": {
+         "const": "verifying"
+        },
+        "to": {
+         "const": "queued"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T28"
+        },
+        "from": {
+         "const": "awaiting_acceptance"
+        },
+        "to": {
+         "const": "completed"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T29"
+        },
+        "from": {
+         "const": "awaiting_acceptance"
+        },
+        "to": {
+         "const": "queued"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T30"
+        },
+        "from": {
+         "$ref": "#/$defs/non_terminal"
+        },
+        "to": {
+         "const": "cancelled"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T31"
+        },
+        "from": {
+         "enum": [
+          "running",
+          "verifying"
+         ]
+        },
+        "to": {
+         "const": "failed"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T32"
+        },
+        "from": {
+         "const": "paused"
+        },
+        "to": {
+         "const": "failed"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T33"
+        },
+        "from": {
+         "const": "running"
+        },
+        "to": {
+         "const": "paused"
+        },
+        "pause_reason": {
+         "const": "disk_pressure"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T34"
+        },
+        "from": {
+         "const": "paused"
+        },
+        "to": {
+         "const": "awaiting_decision"
+        },
+        "from_pause_reason": {
+         "const": "disagreement"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T35"
+        },
+        "from": {
+         "const": "rollover"
+        },
+        "to": {
+         "const": "paused"
+        },
+        "pause_reason": {
+         "const": "reconciliation"
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T36"
+        },
+        "from": {
+         "const": "paused"
+        },
+        "to": {
+         "const": "failed"
+        },
+        "from_pause_reason": {
+         "enum": [
+          "operator",
+          "harness_unavailable",
+          "no_eligible_pair",
+          "disk_pressure",
+          "reconciliation",
+          "disagreement",
+          "mode_switch",
+          "runner_disconnected",
+          "daemon_recovery"
+         ]
+        }
+       }
+      },
+      {
+       "properties": {
+        "transition": {
+         "const": "T38"
+        },
+        "from": {
+         "const": "paused"
+        },
+        "to": {
+         "const": "verifying"
+        },
+        "from_pause_reason": {
+         "const": "daemon_recovery"
+        }
+       }
+      }
+     ]
+    }
+   }
+  },
+  "e_brief_version_accepted": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_thread"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "brief.version_accepted"
+    },
+    "type_version": {
+     "const": 1
+    },
+    "payload": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "brief_version",
+      "digest",
+      "criteria"
+     ],
+     "properties": {
+      "brief_version": {
+       "type": "integer",
+       "minimum": 1
+      },
+      "digest": {
+       "$ref": "#/$defs/sha256"
+      },
+      "criteria": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "id",
+         "text"
+        ],
+        "properties": {
+         "id": {
+          "type": "string",
+          "minLength": 1
+         },
+         "text": {
+          "type": "string",
+          "minLength": 1
+         }
+        }
+       }
+      },
+      "invalidated_evidence": {
+       "type": "array",
+       "items": {
+        "$ref": "#/$defs/ulid"
+       }
+      }
+     }
+    }
+   }
+  },
+  "e_plan_revised": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_thread"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "plan.revised"
+    },
+    "type_version": {
+     "const": 2
+    },
+    "payload": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "plan_revision",
+      "plan_digest",
+      "brief_version",
+      "within_scope",
+      "scope_changes"
+     ],
+     "properties": {
+      "plan_revision": {
+       "type": "integer",
+       "minimum": 1
+      },
+      "plan_digest": {
+       "$ref": "#/$defs/sha256"
+      },
+      "brief_version": {
+       "type": "integer",
+       "minimum": 1
+      },
+      "within_scope": {
+       "type": "boolean",
+       "description": "false iff scope_changes is non-empty; then a decision-02 operator decision is required before dispatch."
+      },
+      "scope_changes": {
+       "type": "array",
+       "uniqueItems": true,
+       "items": {
+        "enum": [
+         "new_target",
+         "broader_access",
+         "changed_criterion",
+         "higher_limit"
+        ]
+       }
+      }
+     },
+     "if": {
+      "properties": {
+       "within_scope": {
+        "const": true
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "scope_changes": {
+        "maxItems": 0
+       }
+      }
+     },
+     "else": {
+      "properties": {
+       "scope_changes": {
+        "minItems": 1
+       }
+      }
+     }
+    }
+   }
+  },
+  "e_request_accepted": {
+   "properties": {
+    "type": {
+     "const": "request.accepted"
+    },
+    "type_version": {
+     "const": 1
+    },
+    "payload": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "request_id",
+      "payload_digest",
+      "receipt_id",
+      "command"
+     ],
+     "properties": {
+      "request_id": {
+       "type": "string",
+       "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+      },
+      "payload_digest": {
+       "$ref": "#/$defs/sha256"
+      },
+      "receipt_id": {
+       "$ref": "#/$defs/ulid"
+      },
+      "command": {
+       "type": "string",
+       "minLength": 1
+      }
+     }
+    }
+   }
+  },
+  "e_assignment_dispatched": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_thread"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "assignment.dispatched"
+    },
+    "type_version": {
+     "const": 1
+    },
+    "payload": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "assignment_id",
+      "harness",
+      "model",
+      "routing_reason",
+      "input_revision",
+      "execution",
+      "skills"
+     ],
+     "properties": {
+      "assignment_id": {
+       "$ref": "#/$defs/ulid"
+      },
+      "harness": {
+       "type": "string"
+      },
+      "model": {
+       "type": "string"
+      },
+      "adapter_capabilities_version": {
+       "type": "string"
+      },
+      "pinned": {
+       "type": "boolean"
+      },
+      "routing_reason": {
+       "type": "string",
+       "minLength": 1
+      },
+      "input_revision": {
+       "type": "string",
+       "minLength": 1
+      },
+      "execution": {
+       "enum": [
+        "direct",
+        "remote",
+        "sandbox"
+       ]
+      },
+      "target": {
+       "type": "string"
+      },
+      "skills": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "id",
+         "digest"
+        ],
+        "properties": {
+         "id": {
+          "type": "string"
+         },
+         "digest": {
+          "$ref": "#/$defs/sha256"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "e_assignment_delivered": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_thread"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "assignment.delivered"
+    },
+    "type_version": {
+     "const": 1
+    },
+    "payload": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "assignment_id",
+      "outcome"
+     ],
+     "properties": {
+      "assignment_id": {
+       "$ref": "#/$defs/ulid"
+      },
+      "outcome": {
+       "enum": [
+        "delivered",
+        "rejected",
+        "unknown"
+       ]
+      },
+      "session_ref": {
+       "type": "string"
+      },
+      "detail": {
+       "type": "string"
+      }
+     }
+    }
+   }
+  },
+  "e_engine_output": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_thread"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "engine.output"
+    },
+    "type_version": {
+     "const": 1
+    },
+    "payload": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "assignment_id",
+      "channel",
+      "chunk"
+     ],
+     "properties": {
+      "assignment_id": {
+       "$ref": "#/$defs/ulid"
+      },
+      "channel": {
+       "enum": [
+        "stdout",
+        "stderr",
+        "message",
+        "tool_call",
+        "tool_result"
+       ]
+      },
+      "chunk": {
+       "type": "string",
+       "maxLength": 65536,
+       "description": "Normative cap: 65536 UTF-8 bytes (producer-enforced, catalogue.md 1.8). maxLength counts code points and is only an upper bound."
+      },
+      "full_output": {
+       "$ref": "#/$defs/ref"
+      },
+      "truncated": {
+       "type": "boolean"
+      }
+     },
+     "if": {
+      "properties": {
+       "truncated": {
+        "const": true
+       }
+      },
+      "required": [
+       "truncated"
+      ]
+     },
+     "then": {
+      "required": [
+       "full_output"
+      ]
+     }
+    }
+   }
+  },
+  "e_engine_usage": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_thread"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "engine.usage"
+    },
+    "type_version": {
+     "const": 1
+    },
+    "payload": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "assignment_id",
+      "reported"
+     ],
+     "properties": {
+      "assignment_id": {
+       "$ref": "#/$defs/ulid"
+      },
+      "reported": {
+       "type": "boolean"
+      },
+      "input_tokens": {
+       "type": "integer",
+       "minimum": 0
+      },
+      "output_tokens": {
+       "type": "integer",
+       "minimum": 0
+      },
+      "elapsed_ms": {
+       "type": "integer",
+       "minimum": 0
+      }
+     },
+     "if": {
+      "properties": {
+       "reported": {
+        "const": false
+       }
+      }
+     },
+     "then": {
+      "not": {
+       "anyOf": [
+        {
+         "required": [
+          "input_tokens"
+         ]
+        },
+        {
+         "required": [
+          "output_tokens"
+         ]
+        }
+       ]
+      }
+     }
+    }
+   }
+  },
+  "e_engine_capability_unavailable": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_thread"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "engine.capability_unavailable"
+    },
+    "type_version": {
+     "const": 1
+    },
+    "payload": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "assignment_id",
+      "harness",
+      "operation"
+     ],
+     "properties": {
+      "assignment_id": {
+       "$ref": "#/$defs/ulid"
+      },
+      "harness": {
+       "type": "string"
+      },
+      "operation": {
+       "type": "string"
+      },
+      "fallback": {
+       "type": "string"
+      }
+     }
+    }
+   }
+  },
+  "e_process_exited": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_thread"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "process.exited"
+    },
+    "type_version": {
+     "const": 1
+    },
+    "payload": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "assignment_id",
+      "execution_outcome",
+      "work"
+     ],
+     "properties": {
+      "assignment_id": {
+       "$ref": "#/$defs/ulid"
+      },
+      "execution_outcome": {
+       "enum": [
+        "exited",
+        "killed",
+        "stalled",
+        "lost_on_reboot",
+        "cancelled"
+       ]
+      },
+      "exit_code": {
+       "type": "integer"
+      },
+      "work": {
+       "enum": [
+        "complete",
+        "resumable",
+        "lost"
+       ]
+      },
+      "descendants_cleaned": {
+       "type": "boolean"
+      }
+     }
+    }
+   }
+  },
+  "e_check_result": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_thread"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "check.result"
+    },
+    "type_version": {
+     "const": 1
+    },
+    "payload": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "check",
+      "status",
+      "revision"
+     ],
+     "properties": {
+      "check": {
+       "type": "string",
+       "minLength": 1
+      },
+      "status": {
+       "$ref": "#/$defs/check_status"
+      },
+      "reason": {
+       "type": "string",
+       "minLength": 1
+      },
+      "revision": {
+       "type": "string",
+       "minLength": 1
+      },
+      "config_digest": {
+       "$ref": "#/$defs/sha256"
+      },
+      "tool_versions": {
+       "type": "object",
+       "additionalProperties": {
+        "type": "string"
+       }
+      },
+      "report": {
+       "$ref": "#/$defs/ref"
+      }
+     },
+     "if": {
+      "properties": {
+       "status": {
+        "enum": [
+         "failed",
+         "error",
+         "partial",
+         "not_run"
+        ]
+       }
+      }
+     },
+     "then": {
+      "required": [
+       "reason"
+      ]
+     }
+    }
+   }
+  },
+  "e_audit_status": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_thread"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "audit.status"
+    },
+    "type_version": {
+     "const": 1
+    },
+    "payload": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "audit_id",
+      "level",
+      "status",
+      "revision"
+     ],
+     "properties": {
+      "audit_id": {
+       "$ref": "#/$defs/ulid"
+      },
+      "level": {
+       "enum": [
+        1,
+        2,
+        3
+       ]
+      },
+      "status": {
+       "enum": [
+        "off",
+        "pending",
+        "running",
+        "pass",
+        "corrections_requested",
+        "error"
+       ]
+      },
+      "revision": {
+       "type": "string",
+       "minLength": 1
+      },
+      "brief_version": {
+       "type": "integer",
+       "minimum": 1
+      }
+     }
+    }
+   }
+  },
+  "e_finding_recorded": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_thread"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "finding.recorded"
+    },
+    "type_version": {
+     "const": 2
+    },
+    "payload": {
+     "type": "object",
+     "oneOf": [
+      {
+       "additionalProperties": false,
+       "required": [
+        "source",
+        "finding"
+       ],
+       "properties": {
+        "source": {
+         "const": "scanner"
+        },
+        "finding": {
+         "$ref": "https://synch.local/contracts/drivers/finding/2.0.0"
+        }
+       }
+      },
+      {
+       "additionalProperties": false,
+       "required": [
+        "source",
+        "finding"
+       ],
+       "properties": {
+        "source": {
+         "enum": [
+          "audit",
+          "security_review"
+         ]
+        },
+        "finding": {
+         "$ref": "#/$defs/review_finding"
+        }
+       }
+      }
+     ]
+    }
+   }
+  },
+  "review_finding": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "id",
+    "summary",
+    "severity",
+    "revision",
+    "evidence_refs"
+   ],
+   "properties": {
+    "id": {
+     "$ref": "#/$defs/ulid"
+    },
+    "summary": {
+     "type": "string",
+     "minLength": 1
+    },
+    "severity": {
+     "enum": [
+      "critical",
+      "high",
+      "medium",
+      "low",
+      "info"
+     ]
+    },
+    "criterion_id": {
+     "type": "string"
+    },
+    "revision": {
+     "type": "string",
+     "minLength": 1
+    },
+    "evidence_refs": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "$ref": "#/$defs/ref"
+     }
+    }
+   }
+  },
+  "e_approval_recorded": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_thread"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "approval.recorded"
+    },
+    "type_version": {
+     "const": 3
+    },
+    "payload": {
+     "$ref": "https://synch.local/contracts/policy/rule-file/3.0.0#/$defs/approval"
+    }
+   }
+  },
+  "e_approval_voided": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_thread"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "approval.voided"
+    },
+    "type_version": {
+     "const": 1
+    },
+    "payload": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "approval_id",
+      "reason"
+     ],
+     "properties": {
+      "approval_id": {
+       "type": "string",
+       "minLength": 1
+      },
+      "reason": {
+       "enum": [
+        "diff_changed",
+        "target_changed",
+        "scope_changed",
+        "expired",
+        "revoked",
+        "thread_ended",
+        "used"
+       ]
+      }
+     }
+    }
+   }
+  },
+  "e_acceptance_recorded": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_thread"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "acceptance.recorded"
+    },
+    "type_version": {
+     "const": 1
+    },
+    "payload": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "decision",
+      "revision",
+      "operator"
+     ],
+     "properties": {
+      "decision": {
+       "enum": [
+        "accepted",
+        "rejected"
+       ]
+      },
+      "revision": {
+       "type": "string",
+       "minLength": 1
+      },
+      "operator": {
+       "type": "string",
+       "minLength": 1
+      },
+      "note": {
+       "type": "string"
+      }
+     }
+    }
+   }
+  },
+  "e_grant_issued": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_thread"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "grant.issued"
+    },
+    "type_version": {
+     "const": 3
+    },
+    "payload": {
+     "$ref": "https://synch.local/contracts/policy/rule-file/3.0.0#/$defs/grant"
+    }
+   }
+  },
+  "e_grant_revoked": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_thread"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "grant.revoked"
+    },
+    "type_version": {
+     "const": 2
+    },
+    "payload": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "grant_id",
+      "affected_threads",
+      "settled",
+      "cause"
+     ],
+     "properties": {
+      "grant_id": {
+       "type": "string",
+       "minLength": 1
+      },
+      "affected_threads": {
+       "type": "array",
+       "items": {
+        "$ref": "#/$defs/ulid"
+       }
+      },
+      "settled": {
+       "type": "boolean",
+       "description": "true once host processes under the grant are confirmed stopped."
+      },
+      "revoked_by": {
+       "type": "string",
+       "minLength": 1,
+       "description": "Authenticated operator identity that revoked the grant."
+      },
+      "cause": {
+       "enum": [
+        "operator",
+        "thread_ended"
+       ],
+       "description": "thread_ended: daemon-caused end of the granted thread (dec. 14)."
+      },
+      "ended_thread": {
+       "$ref": "#/$defs/ulid"
+      }
+     },
+     "oneOf": [
+      {
+       "properties": {
+        "cause": {
+         "const": "operator"
+        }
+       },
+       "required": [
+        "revoked_by"
+       ],
+       "not": {
+        "required": [
+         "ended_thread"
+        ]
+       }
+      },
+      {
+       "properties": {
+        "cause": {
+         "const": "thread_ended"
+        }
+       },
+       "required": [
+        "ended_thread"
+       ],
+       "not": {
+        "required": [
+         "revoked_by"
+        ]
+       }
+      }
+     ]
+    }
+   }
+  },
+  "e_policy_decided": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_thread"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "policy.decided"
+    },
+    "type_version": {
+     "const": 2
+    },
+    "payload": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "action",
+      "decision",
+      "machine",
+      "outcome"
+     ],
+     "properties": {
+      "action": {
+       "type": "string",
+       "minLength": 1
+      },
+      "decision": {
+       "enum": [
+        "allow",
+        "deny",
+        "ask"
+       ]
+      },
+      "rule_id": {
+       "type": "string",
+       "pattern": "^(operator|project|role|skill|builtin):[^# ]+#[a-z0-9][a-z0-9._-]*$"
+      },
+      "machine": {
+       "type": "string",
+       "minLength": 1
+      },
+      "target": {
+       "type": "string"
+      },
+      "approval_id": {
+       "type": "string"
+      },
+      "grant_id": {
+       "type": "string"
+      },
+      "outcome": {
+       "enum": [
+        "executed",
+        "blocked",
+        "waiting_approval",
+        "failed"
+       ]
+      },
+      "command": {
+       "type": "string"
+      }
+     }
+    }
+   }
+  },
+  "e_external_request_persisted": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_thread"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "external_request.persisted"
+    },
+    "type_version": {
+     "const": 3
+    },
+    "payload": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "external_request_id",
+      "driver",
+      "endpoint",
+      "operation",
+      "resource",
+      "params_digest"
+     ],
+     "properties": {
+      "external_request_id": {
+       "$ref": "#/$defs/ulid"
+      },
+      "driver": {
+       "type": "string",
+       "minLength": 1
+      },
+      "endpoint": {
+       "type": "string",
+       "minLength": 1,
+       "description": "Registered provider endpoint ID (one core manages heterogeneous endpoints)."
+      },
+      "operation": {
+       "enum": [
+        "create_from_base",
+        "start",
+        "stop",
+        "delete",
+        "snapshot",
+        "restore"
+       ]
+      },
+      "resource": {
+       "type": "string",
+       "minLength": 1,
+       "description": "Existing VM ref, or for create_from_base the intended name carrying the request tag."
+      },
+      "params_digest": {
+       "$ref": "#/$defs/sha256"
+      }
+     }
+    }
+   }
+  },
+  "e_external_request_task_bound": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_thread"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "external_request.task_bound"
+    },
+    "type_version": {
+     "const": 1
+    },
+    "payload": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "external_request_id",
+      "endpoint",
+      "provider_task_id"
+     ],
+     "properties": {
+      "external_request_id": {
+       "$ref": "#/$defs/ulid"
+      },
+      "endpoint": {
+       "type": "string",
+       "minLength": 1
+      },
+      "provider_task_id": {
+       "type": "string",
+       "minLength": 1
+      }
+     }
+    }
+   }
+  },
+  "e_external_request_resolved": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_thread"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "external_request.resolved"
+    },
+    "type_version": {
+     "const": 4
+    },
+    "payload": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "external_request_id",
+      "operation",
+      "resolution",
+      "via"
+     ],
+     "description": "Evidence fields are allowed only with their own via (vm-driver.md section 3 table). Each resolution admits only the vias that can establish it.",
+     "properties": {
+      "external_request_id": {
+       "$ref": "#/$defs/ulid"
+      },
+      "operation": {
+       "enum": [
+        "create_from_base",
+        "start",
+        "stop",
+        "delete",
+        "snapshot",
+        "restore"
+       ]
+      },
+      "resolution": {
+       "enum": [
+        "succeeded",
+        "failed",
+        "not_executed",
+        "unknown"
+       ]
+      },
+      "via": {
+       "enum": [
+        "response",
+        "provider_task",
+        "provider_task_absent",
+        "resulting_resource",
+        "operator",
+        "none"
+       ]
+      },
+      "provider_task_id": {
+       "type": "string",
+       "minLength": 1
+      },
+      "absence_lookup": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "client_token",
+        "queried_at"
+       ],
+       "description": "Authoritative token lookup in the provider task API that found no task (platform must declare token lookup authoritative in its matrix row).",
+       "properties": {
+        "client_token": {
+         "type": "string",
+         "pattern": "^synch-[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "queried_at": {
+         "type": "string",
+         "format": "date-time"
+        }
+       }
+      },
+      "resource_evidence": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "resource",
+        "client_token"
+       ],
+       "properties": {
+        "resource": {
+         "type": "string",
+         "minLength": 1
+        },
+        "client_token": {
+         "type": "string",
+         "pattern": "^synch-[0-9A-HJKMNP-TV-Z]{26}$"
+        },
+        "observed_state": {
+         "type": "string"
+        }
+       }
+      },
+      "operator": {
+       "type": "string",
+       "minLength": 1
+      },
+      "note": {
+       "type": "string",
+       "minLength": 1
+      }
+     },
+     "allOf": [
+      {
+       "if": {
+        "required": [
+         "resource_evidence"
+        ]
+       },
+       "then": {
+        "properties": {
+         "via": {
+          "const": "resulting_resource"
+         }
+        }
+       }
+      },
+      {
+       "if": {
+        "required": [
+         "provider_task_id"
+        ]
+       },
+       "then": {
+        "properties": {
+         "via": {
+          "const": "provider_task"
+         }
+        }
+       }
+      },
+      {
+       "if": {
+        "required": [
+         "absence_lookup"
+        ]
+       },
+       "then": {
+        "properties": {
+         "via": {
+          "const": "provider_task_absent"
+         }
+        }
+       }
+      },
+      {
+       "if": {
+        "required": [
+         "operator"
+        ]
+       },
+       "then": {
+        "properties": {
+         "via": {
+          "const": "operator"
+         }
+        }
+       }
+      },
+      {
+       "if": {
+        "required": [
+         "note"
+        ]
+       },
+       "then": {
+        "properties": {
+         "via": {
+          "const": "operator"
+         }
+        }
+       }
+      },
+      {
+       "if": {
+        "properties": {
+         "via": {
+          "const": "provider_task"
+         }
+        }
+       },
+       "then": {
+        "required": [
+         "provider_task_id"
+        ]
+       }
+      },
+      {
+       "if": {
+        "properties": {
+         "via": {
+          "const": "provider_task_absent"
+         }
+        }
+       },
+       "then": {
+        "required": [
+         "absence_lookup"
+        ]
+       }
+      },
+      {
+       "if": {
+        "properties": {
+         "via": {
+          "const": "resulting_resource"
+         }
+        }
+       },
+       "then": {
+        "required": [
+         "resource_evidence"
+        ]
+       }
+      },
+      {
+       "if": {
+        "properties": {
+         "via": {
+          "const": "operator"
+         }
+        }
+       },
+       "then": {
+        "required": [
+         "operator",
+         "note"
+        ]
+       }
+      },
+      {
+       "if": {
+        "properties": {
+         "resolution": {
+          "const": "succeeded"
+         }
+        }
+       },
+       "then": {
+        "properties": {
+         "via": {
+          "enum": [
+           "response",
+           "provider_task",
+           "resulting_resource",
+           "operator"
+          ]
+         }
+        }
+       }
+      },
+      {
+       "if": {
+        "properties": {
+         "resolution": {
+          "const": "failed"
+         }
+        }
+       },
+       "then": {
+        "properties": {
+         "via": {
+          "enum": [
+           "response",
+           "provider_task",
+           "operator"
+          ]
+         }
+        }
+       }
+      },
+      {
+       "if": {
+        "properties": {
+         "resolution": {
+          "const": "not_executed"
+         }
+        }
+       },
+       "then": {
+        "properties": {
+         "via": {
+          "enum": [
+           "response",
+           "provider_task_absent",
+           "operator"
+          ]
+         }
+        }
+       }
+      },
+      {
+       "if": {
+        "properties": {
+         "resolution": {
+          "const": "unknown"
+         }
+        }
+       },
+       "then": {
+        "properties": {
+         "via": {
+          "enum": [
+           "none"
+          ]
+         }
+        }
+       }
+      },
+      {
+       "if": {
+        "properties": {
+         "via": {
+          "const": "resulting_resource"
+         }
+        }
+       },
+       "then": {
+        "properties": {
+         "operation": {
+          "enum": [
+           "create_from_base",
+           "snapshot"
+          ]
+         }
+        }
+       }
+      }
+     ]
+    }
+   }
+  },
+  "e_rollover_checkpointed": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_thread"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "rollover.checkpointed"
+    },
+    "type_version": {
+     "const": 1
+    },
+    "payload": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "checkpoint_id",
+      "checkpoint",
+      "trigger"
+     ],
+     "properties": {
+      "checkpoint_id": {
+       "$ref": "#/$defs/ulid"
+      },
+      "checkpoint": {
+       "$ref": "#/$defs/ref"
+      },
+      "trigger": {
+       "enum": [
+        "context_limit",
+        "harness_switch",
+        "operator",
+        "harness_failure",
+        "daemon_recovery"
+       ]
+      }
+     }
+    }
+   }
+  },
+  "e_mode_changed": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_thread"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "mode.changed"
+    },
+    "type_version": {
+     "const": 2
+    },
+    "payload": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "target",
+      "from",
+      "to",
+      "phase",
+      "actor"
+     ],
+     "properties": {
+      "target": {
+       "type": "string",
+       "minLength": 1
+      },
+      "from": {
+       "enum": [
+        "sandbox",
+        "provider",
+        "full_control"
+       ]
+      },
+      "to": {
+       "enum": [
+        "sandbox",
+        "provider",
+        "full_control"
+       ]
+      },
+      "phase": {
+       "enum": [
+        "requested",
+        "settling",
+        "active"
+       ]
+      },
+      "host_processes_stopped": {
+       "type": "boolean"
+      },
+      "actor": {
+       "type": "string",
+       "minLength": 1
+      }
+     },
+     "if": {
+      "properties": {
+       "to": {
+        "const": "sandbox"
+       },
+       "phase": {
+        "const": "active"
+       }
+      }
+     },
+     "then": {
+      "required": [
+       "host_processes_stopped"
+      ],
+      "properties": {
+       "host_processes_stopped": {
+        "const": true
+       }
+      }
+     }
+    }
+   }
+  },
+  "e_resource_pressure": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_system"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "resource.pressure"
+    },
+    "type_version": {
+     "const": 1
+    },
+    "payload": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "resource",
+      "level"
+     ],
+     "properties": {
+      "resource": {
+       "const": "disk"
+      },
+      "level": {
+       "enum": [
+        "ok",
+        "pressure"
+       ]
+      },
+      "free_bytes": {
+       "type": "integer",
+       "minimum": 0
+      },
+      "path": {
+       "type": "string"
+      }
+     }
+    }
+   }
+  },
+  "e_runner_connection": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_system"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "runner.connection"
+    },
+    "type_version": {
+     "const": 1
+    },
+    "payload": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "runner",
+      "state"
+     ],
+     "properties": {
+      "runner": {
+       "type": "string",
+       "pattern": "^[A-Za-z0-9._-]{1,64}$"
+      },
+      "state": {
+       "enum": [
+        "connected",
+        "disconnected"
+       ]
+      },
+      "replayed_from_seq": {
+       "type": "integer",
+       "minimum": 0
+      },
+      "replayed_to_seq": {
+       "type": "integer",
+       "minimum": 0
+      }
+     }
+    }
+   }
+  },
+  "check_entry": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "check"
+   ],
+   "properties": {
+    "check": {
+     "type": "string",
+     "minLength": 1
+    },
+    "reason": {
+     "type": "string",
+     "minLength": 1
+    }
+   }
+  },
+  "check_entry_reason": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "check",
+    "reason"
+   ],
+   "properties": {
+    "check": {
+     "type": "string",
+     "minLength": 1
+    },
+    "reason": {
+     "type": "string",
+     "minLength": 1
+    }
+   }
+  },
+  "e_child_assignment_recorded": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_thread"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "child.assignment_recorded"
+    },
+    "type_version": {
+     "const": 1
+    },
+    "payload": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "parent_thread_id",
+      "child_thread_id",
+      "assignment_id",
+      "purpose",
+      "role",
+      "role_reason",
+      "allowed_capabilities",
+      "expected_evidence"
+     ],
+     "properties": {
+      "parent_thread_id": {
+       "$ref": "#/$defs/ulid"
+      },
+      "child_thread_id": {
+       "$ref": "#/$defs/ulid"
+      },
+      "assignment_id": {
+       "$ref": "#/$defs/ulid"
+      },
+      "purpose": {
+       "type": "string",
+       "minLength": 1
+      },
+      "role": {
+       "enum": [
+        "builder",
+        "ops",
+        "security",
+        "auditor"
+       ]
+      },
+      "role_reason": {
+       "type": "string",
+       "minLength": 1
+      },
+      "input_revision": {
+       "type": "string",
+       "minLength": 1
+      },
+      "target": {
+       "type": "string",
+       "minLength": 1
+      },
+      "allowed_capabilities": {
+       "type": "array",
+       "uniqueItems": true,
+       "items": {
+        "type": "string",
+        "minLength": 1
+       }
+      },
+      "expected_evidence": {
+       "type": "array",
+       "uniqueItems": true,
+       "items": {
+        "type": "string",
+        "minLength": 1
+       },
+       "minItems": 1
+      },
+      "dependencies": {
+       "type": "array",
+       "uniqueItems": true,
+       "items": {
+        "$ref": "#/$defs/ulid"
+       }
+      }
+     },
+     "anyOf": [
+      {
+       "required": [
+        "input_revision"
+       ]
+      },
+      {
+       "required": [
+        "target"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "e_child_result_recorded": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_thread"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "child.result_recorded"
+    },
+    "type_version": {
+     "const": 1
+    },
+    "payload": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "child_thread_id",
+      "assignment_id",
+      "outcome",
+      "revision",
+      "checks",
+      "limitations",
+      "open_requirements"
+     ],
+     "properties": {
+      "child_thread_id": {
+       "$ref": "#/$defs/ulid"
+      },
+      "assignment_id": {
+       "$ref": "#/$defs/ulid"
+      },
+      "outcome": {
+       "enum": [
+        "completed",
+        "failed",
+        "cancelled"
+       ]
+      },
+      "revision": {
+       "type": "string",
+       "minLength": 1
+      },
+      "checks": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "passed",
+        "failed",
+        "error",
+        "partial",
+        "not_run"
+       ],
+       "properties": {
+        "passed": {
+         "type": "array",
+         "items": {
+          "$ref": "#/$defs/check_entry"
+         }
+        },
+        "failed": {
+         "type": "array",
+         "items": {
+          "$ref": "#/$defs/check_entry_reason"
+         }
+        },
+        "error": {
+         "type": "array",
+         "items": {
+          "$ref": "#/$defs/check_entry_reason"
+         }
+        },
+        "partial": {
+         "type": "array",
+         "items": {
+          "$ref": "#/$defs/check_entry_reason"
+         }
+        },
+        "not_run": {
+         "type": "array",
+         "items": {
+          "$ref": "#/$defs/check_entry_reason"
+         }
+        }
+       }
+      },
+      "limitations": {
+       "type": "array",
+       "uniqueItems": true,
+       "items": {
+        "type": "string",
+        "minLength": 1
+       }
+      },
+      "open_requirements": {
+       "type": "array",
+       "uniqueItems": true,
+       "items": {
+        "type": "string",
+        "minLength": 1
+       }
+      }
+     }
+    }
+   }
+  },
+  "e_audit_setting_recorded": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_thread"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "audit.setting_recorded"
+    },
+    "type_version": {
+     "const": 1
+    },
+    "payload": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "thread_id",
+      "setting",
+      "reason"
+     ],
+     "properties": {
+      "thread_id": {
+       "$ref": "#/$defs/ulid"
+      },
+      "setting": {
+       "enum": [
+        "off",
+        "level1",
+        "level2",
+        "level3"
+       ]
+      },
+      "reason": {
+       "type": "string",
+       "minLength": 1
+      }
+     }
+    }
+   }
+  }
+ }
+}

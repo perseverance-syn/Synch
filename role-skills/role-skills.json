@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "roles": {
+    "coordinator": ["skills/synch-coordinator-planning/SKILL.md"],
+    "builder": ["skills/synch-builder-delivery/SKILL.md"],
+    "ops": ["skills/synch-ops-change-control/SKILL.md"],
+    "security": ["skills/synch-security-triage/SKILL.md"],
+    "auditor": ["skills/synch-independent-audit/SKILL.md"]
+  }
+}
