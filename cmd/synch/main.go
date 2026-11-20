@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -66,15 +67,37 @@ func runDaemon() error {
 	}
 	tokens := api.NewMemoryTokens()
 	tokens.Set(token, "operator:local")
+	cfg, err := daemonConfig(os.Getenv, dataDir, tokens)
+	if err != nil {
+		return err
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	d, err := daemon.New(daemon.Config{
-		DataDir: dataDir, Tokens: tokens, Listen: os.Getenv("SYNCH_LISTEN"), PolicyStore: os.Getenv("SYNCH_POLICY_STORE"),
-	})
+	d, err := daemon.New(cfg)
 	if err != nil {
 		return err
 	}
 	return d.Run(ctx)
+}
+
+// daemonConfig reads the optional SYNCH_* settings documented in doc.go. Every
+// one is optional: with only SYNCH_TOKEN set the daemon starts and pauses
+// threads with no_eligible_pair until a harness is qualified and a default is set.
+func daemonConfig(getenv func(string) string, dataDir string, tokens api.TokenVerifier) (daemon.Config, error) {
+	cfg := daemon.Config{
+		DataDir: dataDir, Tokens: tokens, Listen: getenv("SYNCH_LISTEN"), PolicyStore: getenv("SYNCH_POLICY_STORE"),
+		CodexBinary: getenv("SYNCH_CODEX_BIN"), ClaudeBinary: getenv("SYNCH_CLAUDE_BIN"), KimiBinary: getenv("SYNCH_KIMI_BIN"),
+		DefaultHarness: getenv("SYNCH_DEFAULT_HARNESS"), DefaultModel: getenv("SYNCH_DEFAULT_MODEL"),
+	}
+	if raw := getenv("SYNCH_PROJECTS"); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &cfg.Projects); err != nil {
+			return daemon.Config{}, fmt.Errorf("SYNCH_PROJECTS must be a JSON object of project id to {dir, gate_file}: %w", err)
+		}
+	}
+	// Values are validated when the daemon starts, which refuses a bad one with a clear error.
+	cfg.ChildMaxRuntime = daemon.Setting(getenv("SYNCH_CHILD_MAX_RUNTIME"))
+	cfg.ChildLoopRepeats = daemon.Setting(getenv("SYNCH_CHILD_LOOP_REPEATS"))
+	return cfg, nil
 }
 
 // main passes process arguments to the entry-point dispatcher.

@@ -29,7 +29,10 @@ type threadView struct {
 	Harness      string `json:"harness,omitempty"`
 	Model        string `json:"model,omitempty"`
 	Audit        string `json:"audit_status,omitempty"`
-	LastSeq      int64  `json:"last_seq"`
+	// WaitingFor is a derived, read-only note on a queued thread: what the operator must
+	// do before the daemon can delegate it (see Config.WaitingFor). It is not machine state.
+	WaitingFor string `json:"waiting_for,omitempty"`
+	LastSeq    int64  `json:"last_seq"`
 }
 
 // createThread persists the coordinator and the API's submission metadata in the receipt writer.
@@ -58,6 +61,18 @@ func (s *Server) createThread(body map[string]any) (queue.Decision, error) {
 		}
 		facts := thread.Facts{BriefVersion: 1, ReviewPlanFirst: review, AuditSetting: audit}
 		if err := s.config.Threads.CreateTx(ctx, tx, id, facts); err != nil {
+			return nil, err
+		}
+		// The catalogue creation fact carries depth and project from the start, as
+		// children.CreateRoot writes it (the daemon never backfills it).
+		created, err := json.Marshal(map[string]any{
+			"thread_id": id, "project_id": body["project_id"], "role": "coordinator", "review_plan_first": review, "depth": 0,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if _, err := tx.Append(ctx, eventlog.NewEvent{ThreadID: id, Stream: "thread:" + id, Type: "thread.created", TypeVersion: 1,
+			Actor: eventlog.Actor{Kind: "daemon", ID: "local"}, Payload: created}); err != nil {
 			return nil, err
 		}
 		result := map[string]any{"thread_id": id, "submission": body}
@@ -98,6 +113,9 @@ func (s *Server) hydrate(ctx context.Context, v *threadView) error {
 	v.Role, v.State, v.PauseReason = "coordinator", state.Phase, state.Reason
 	v.BriefVersion, v.PlanDigest, v.Revision = state.Facts.BriefVersion, state.Facts.PlanDigest, state.Facts.Revision
 	v.Audit = state.Audit
+	if s.config.WaitingFor != nil && state.Phase == "queued" {
+		v.WaitingFor = s.config.WaitingFor(ctx, v.ID)
+	}
 	if state.SelectedHarness != nil {
 		v.Harness, v.Model = state.SelectedHarness.Harness, state.SelectedHarness.Model
 	}

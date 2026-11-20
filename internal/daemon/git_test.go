@@ -12,6 +12,7 @@ import (
 
 	"synch/internal/engine"
 	"synch/internal/gitops"
+	"synch/internal/thread"
 )
 
 const gateFile = "shared.txt"
@@ -70,16 +71,23 @@ func configureGitGate(t *testing.T, cfg *Config, ask bool) {
 // gateAcceptedWorktree produces a committed result and obtains operator acceptance.
 func gateAcceptedWorktree(t *testing.T, d *Daemon, base, id, revision string, starts <-chan *fakeSession) {
 	t.Helper()
-	if err := d.StartAssignment(t.Context(), engine.StartRequest{ThreadID: id}); err != nil {
+	if err := d.StartAssignment(t.Context(), engine.StartRequest{ThreadID: id, Workdir: t.TempDir()}); err != nil {
 		t.Fatal(err)
 	}
 	session := <-starts
+	if err := d.threads.Update(t.Context(), id, func(f *thread.Facts) error { f.Revision = revision; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.record(id, "audit.status", map[string]string{"status": "pass", "revision": revision}, ""); err != nil {
+		t.Fatal(err)
+	}
 	session.events <- engine.EngineEvent{Channel: "exit"}
+	// The daemon runs the missing gate file and reaches awaiting_acceptance itself.
 	waitGate(t, func() bool {
 		state, err := d.threads.Status(t.Context(), id)
-		return err == nil && state.Phase == "verifying"
+		return err == nil && state.Phase == "awaiting_acceptance"
 	})
-	finishGateReview(t, d, base, id, revision)
+	gateMutation(t, base+"/v1/threads/"+id+"/commands", "accept-"+id, fmt.Sprintf(`{"command":"accept","revision":%q}`, revision), 202)
 }
 
 // --- Phase 1 scenarios: reconcile multiple worktrees and reject stale approvals ---

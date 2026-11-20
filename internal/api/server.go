@@ -35,6 +35,9 @@ type Config struct {
 	// It takes precedence over Authority on the policy endpoints.
 	Policy       *policy.Engine
 	DiskPressure func() bool
+	// WaitingFor, when set, names what a queued thread is waiting on from the operator
+	// (empty when nothing). It is a derived read-only detail, never a machine state.
+	WaitingFor   func(ctx context.Context, thread string) string
 	Heartbeat    time.Duration
 	PollInterval time.Duration
 	LiveBuffer   int

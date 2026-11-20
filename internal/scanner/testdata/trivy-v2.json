@@ -1,0 +1,36 @@
+{
+  "SchemaVersion": 2,
+  "ArtifactName": "fixture",
+  "ArtifactType": "filesystem",
+  "Metadata": {"Annotations": {"planted-\u003csecret\u003e": "planted-\u003csecret\u003e"}},
+  "Results": [
+    {
+      "Target": "go.mod",
+      "Class": "lang-pkgs",
+      "Type": "gomod",
+      "Vulnerabilities": [{
+        "VulnerabilityID": "CVE-2099-0001",
+        "PkgName": "example.test/dependency",
+        "PkgIdentifier": {"PURL": "pkg:golang/example.test/dependency@v1.2.3"},
+        "InstalledVersion": "v1.2.3",
+        "FixedVersion": "v1.2.4",
+        "Severity": "HIGH",
+        "Title": "Fixture vulnerability, planted-\u003csecret\u003e",
+        "PrimaryURL": "https://example.test/CVE-2099-0001"
+      }]
+    },
+    {
+      "Target": "Dockerfile",
+      "Class": "config",
+      "Type": "dockerfile",
+      "Misconfigurations": [{
+        "ID": "DS-0002",
+        "Title": "Fixture configuration check",
+        "Message": "Fixture configuration finding",
+        "Severity": "LOW",
+        "Status": "FAIL",
+        "CauseMetadata": {"StartLine": 4, "EndLine": 5}
+      }]
+    }
+  ]
+}

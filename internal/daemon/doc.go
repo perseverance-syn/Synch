@@ -8,6 +8,57 @@
 //   - HTTP commands enter the API, queue and durable thread machine.
 //   - Authority receipts stage policy events and publish only after SQLite commits.
 //   - Git operations pass live worktree evidence to the policy engine before dispatch.
-//   - Codex launches use policy, Direct Host access and then the supervisor.
+//   - Grant before delegation (D-43): a coordinator is not delegated until it holds an active
+//     Full Control grant for this host. It stays queued (no child, no session) and the API
+//     thread view carries a derived, read-only waiting_for note naming the exact `synch grants
+//     create` command; `synch threads show` and `threads list` print it. The daemon only reads
+//     the grant log, never issues grants; the next dispatch tick after the operator grants
+//     delegates, and the child inherits that grant (Q-21).
+//   - The API writes thread.created (project, depth 0) when it creates a thread, so the daemon
+//     never backfills it. A delegation is durable once the child is recorded (Facts.Awaited).
+//     A crash between a coordinator's T05 and T08 recovers without an operator: the interrupted
+//     no-session dispatch is classified process.exited work=resumable, T22 requeues the parent
+//     and it parks on its recorded child, or delegates again when none was recorded; never twice.
+//   - A top-level thread is a Coordinator and never runs tools or commands (dec. 05,
+//     D-41); policy reports it as a coordinator whatever it is assigned, and an engine
+//     session on it is refused. When the dispatch loop promotes it (T01/T02) and
+//     routing finds a pair (else T06 paused(no_eligible_pair)), the daemon creates one
+//     managed Builder child through internal/children (purpose = the brief, input
+//     revision = the project checkout's HEAD, expected evidence = the required checks),
+//     records child.assignment_recorded and audit.setting_recorded through an
+//     event-log-backed children.Recorder, and takes the parent T05 -> T08
+//     (waiting_children, slot released). Child limits are the Q-27 defaults
+//     (Config.ChildLimits overrides them).
+//   - The child is promoted, routed (inheriting the parent's pin and project) and run by
+//     the same loop as policy role builder, so engine launch and gates need the
+//     operator's rules and an operator Full Control grant issued on the parent before
+//     the child exists; the daemon never issues grants. A launch that policy denies,
+//     or a child blocked by a failed dependency, ends failed (T31, or T06 then T32 for
+//     a queued child) with a failed result instead of staying queued.
+//   - An ended child gets child.result_recorded (outcome, revision, checks by status,
+//     open requirements). A child whose checks all passed is accepted by its
+//     coordinator (T28); a failed check takes T27 or T31 within the attempt limit;
+//     failed or not-run evidence waits for the operator. When all awaited children
+//     ended the parent takes T09, T05 (no session) and T25, reports each child check as
+//     its own check.result (a failed or cancelled child is a failed check naming the
+//     open requirements) and takes T26 when the audit setting allows.
+//   - Child watchdog (D-42): a child session past its runtime budget (Config.ChildMaxRuntime,
+//     default 2h, overridden per project by max_runtime, "off" disables), or one
+//     making ChildLoopRepeats (default 5, project loop_repeats) identical tool calls in a row with no other output,
+//     is stopped; an engine exit that is not clean (including a supervisor stall) is handled
+//     the same way. The child records process.exited work=lost, a stderr line naming the
+//     reason, and takes T15 with a failure checkpoint carrying that reason, for the
+//     coordinator or operator to steer (decision 07).
+//   - Cancelling a parent cancels its children first (T30), each confirmed only once its
+//     engine session has stopped.
+//   - Codex, Claude Code and Kimi adapters are built from configured binaries (an
+//     absent binary means the harness is not offered). Launches use policy, Direct
+//     Host access and then the supervisor. Claude Code can_use_tool requests are
+//     answered by the policy engine and fail closed; a harness that cannot start is T15.
+//   - A finished assignment is T25; the project's gate file runs through
+//     internal/gates, each check.result is recorded (a missing gate file is not_run),
+//     and T26 follows when the audit setting allows it.
+//   - An optional remote driver is registered under the remote execution kind; a
+//     disconnected runner pauses new assignments and fresh approvals (T19).
 //   - Engine and supervisor facts enter the shared event log for SSE and recovery.
 package daemon

@@ -199,6 +199,9 @@ func runThreadsList(g *globals, env func(string) string, out *printer, args []st
 	if err := out.printThreadRows(resp); err != nil {
 		return localError(out, err)
 	}
+	if err := out.printWaiting(resp.body); err != nil {
+		return localError(out, err)
+	}
 	return exitOK
 }
 
@@ -270,7 +273,13 @@ func runThreadsShow(g *globals, env func(string) string, out *printer, args []st
 	if !resp.ok() {
 		return serverError(out, resp)
 	}
-	return printResult(out, resp)
+	if code := printResult(out, resp); code != exitOK {
+		return code
+	}
+	if err := out.printWaiting(resp.body); err != nil {
+		return localError(out, err)
+	}
+	return exitOK
 }
 
 // --- thread cmd ---

@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"synch/internal/eventlog"
 	"synch/internal/gitops"
-	"synch/internal/thread"
 )
 
 // RegisterProject reads a local project's pinned endpoints.
@@ -15,19 +13,28 @@ func (d *Daemon) RegisterProject(ctx context.Context, path, branch, conventions 
 	return d.git.Register(ctx, path, branch, conventions)
 }
 
-// CreateWritingThread stores a managed draft before provisioning its worktree.
+// CreateWritingThread creates a managed Builder child of the parent through the
+// coordinator, with its assignment recorded, before its worktree is provisioned.
 func (d *Daemon) CreateWritingThread(ctx context.Context, parent string) (string, error) {
 	if parent == "" {
 		return "", errors.New("a managed writing thread requires a parent")
 	}
-	id := eventlog.NewID()
-	err := d.threads.Create(ctx, id, thread.Facts{ManagedParent: parent, BriefVersion: 1, AuditSetting: "default"})
-	return id, err
+	state, err := d.threads.Status(ctx, parent)
+	if err != nil {
+		return "", err
+	}
+	return d.delegate(ctx, state, "Edit the project in an isolated worktree.", "unversioned")
 }
 
 // CreateWorktree provisions a verified worktree for an existing thread.
 func (d *Daemon) CreateWorktree(ctx context.Context, project gitops.Project, id, path string) (gitops.Thread, error) {
-	return d.git.CreateThread(ctx, project, id, path, "")
+	worktree, err := d.git.CreateThread(ctx, project, id, path, "")
+	if err == nil {
+		d.mu.Lock()
+		d.worktrees[id] = worktree.Path()
+		d.mu.Unlock()
+	}
+	return worktree, err
 }
 
 // CommitWorktree stages and commits a writing thread's changes through policy.

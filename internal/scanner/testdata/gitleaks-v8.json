@@ -1,0 +1,16 @@
+[
+  {
+    "Description": "Fixture detector leaked unknown-fixture-token in its description",
+    "StartLine": 3,
+    "EndLine": 3,
+    "StartColumn": 1,
+    "EndColumn": 35,
+    "Match": "TOKEN=unknown-fixture-token",
+    "Secret": "unknown-fixture-token",
+    "File": "config.env",
+    "RuleID": "fixture-token",
+    "Commit": "planted-<secret>",
+    "Message": "unknown-fixture-token",
+    "Fingerprint": "config.env:fixture-token:3"
+  }
+]

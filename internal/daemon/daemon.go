@@ -13,12 +13,15 @@ import (
 	"time"
 
 	"synch/internal/api"
+	"synch/internal/children"
 	"synch/internal/engine"
-	"synch/internal/engine/codex"
+	"synch/internal/engine/claudecode"
 	"synch/internal/eventlog"
 	"synch/internal/execdriver"
 	"synch/internal/gitops"
 	"synch/internal/policy"
+	"synch/internal/remote"
+	"synch/internal/routing"
 	"synch/internal/supervisor"
 	"synch/internal/thread"
 )
@@ -29,27 +32,76 @@ type Config struct {
 	Listen      string
 	PolicyStore string
 	Tokens      api.TokenVerifier
-	// CodexBinary defaults to codex. An unqualified adapter cannot start it.
-	CodexBinary string
-	adapter     func(engine.Sink) (engine.EngineAdapter, error)
-	freeSpace   func(string) (free, total uint64, err error)
+	// Binary paths default to codex, claude and kimi on PATH. A binary that
+	// cannot be found means that harness is not offered to routing.
+	CodexBinary, ClaudeBinary, KimiBinary string
+	// DefaultHarness and DefaultModel form the configured default pair.
+	DefaultHarness, DefaultModel string
+	// TaskKind labels routing comparisons; it defaults to "coding".
+	TaskKind string
+	// Qualifications supplies operation qualification per adapter name
+	// ("codex", "claude-code", "kimi-code"). Without it every operation is untested.
+	Qualifications map[string]engine.CapabilitySet
+	// HarnessVersions overrides the version given to routing per adapter name.
+	// By default routing uses the lower bound of the declared version range,
+	// and the adapter verifies the installed release when it starts a session.
+	HarnessVersions map[string]string
+	// Evidence is recorded decision 11 comparison data for routing.
+	Evidence []routing.Evidence
+	// Projects maps an API project_id to its checkout and gate file.
+	Projects map[string]ProjectConfig
+	// Remote registers the remote execution driver when set.
+	Remote *RemoteConfig
+	// ChildMaxRuntime is the daemon-wide longest a managed child's engine session may
+	// run, as a Go duration (default 2h); "0" or "off" disables the budget. A project's
+	// max_runtime wins. ChildLoopRepeats is the same for how many consecutive identical
+	// tool calls with no other output count as a loop (default 5, at least 2).
+	ChildMaxRuntime, ChildLoopRepeats Setting
+	// ChildLimits overrides the Q-27 child limits (depth 3, concurrency 4, attempts 3); zero keeps each default.
+	ChildLimits children.Limits
+
+	adapter   func(engine.Sink) (engine.EngineAdapter, error)
+	freeSpace func(string) (free, total uint64, err error)
+	poll      time.Duration
+	retryBase time.Duration
+	noLoop    bool
 }
 
 // Daemon owns the components sharing one durable event store.
 type Daemon struct {
-	store      *eventlog.Store
-	threads    *thread.Machine
-	policy     *policy.Engine
-	adapter    engine.EngineAdapter
-	driver     *execdriver.Direct
-	supervisor *supervisor.Supervisor
-	git        *gitops.Service
-	rules      []*policy.File
-	dataDir    string
-	host       string
-	port       string
-	tokens     api.TokenVerifier
-	pressure   atomic.Bool
+	store        *eventlog.Store
+	threads      *thread.Machine
+	children     *children.Coordinator
+	recorder     *eventRecorder
+	created      map[string]time.Time // creation times of managed children, for grant inheritance
+	settled      map[string]bool      // ended children whose result is recorded
+	unrunnable   map[string]bool      // children being abandoned, which the pair guard refuses
+	policy       *policy.Engine
+	harnesses    []*harness
+	driver       *execdriver.Direct
+	remote       *remote.Driver
+	remoteID     string
+	permits      chan claudecode.PermissionRequest
+	defaults     routing.Pair
+	taskKind     string
+	routeData    []routing.Evidence
+	projects     map[string]ProjectConfig
+	poll         time.Duration
+	defaultWatch watchLimits
+	projectWatch map[string]watchLimits
+	noLoop       bool
+	failed       map[string]*dispatchFailure
+	verifying    map[string]bool
+	retryBase    time.Duration
+	worktrees    map[string]string
+	supervisor   *supervisor.Supervisor
+	git          *gitops.Service
+	rules        []*policy.File
+	dataDir      string
+	host         string
+	port         string
+	tokens       api.TokenVerifier
+	pressure     atomic.Bool
 
 	mu         sync.Mutex
 	server     *http.Server
@@ -100,6 +152,7 @@ func New(cfg Config) (daemon *Daemon, err error) {
 	}
 	lifetime, cancel := context.WithCancel(context.Background())
 	d := &Daemon{
+		failed: make(map[string]*dispatchFailure), settled: make(map[string]bool), created: make(map[string]time.Time), unrunnable: make(map[string]bool), verifying: make(map[string]bool), worktrees: make(map[string]string),
 		store: store, dataDir: dataDir, host: host, port: port, tokens: cfg.Tokens,
 		lifetime: lifetime, cancel: cancel, sessions: make(map[string]*assignment),
 		recovering: make(map[string]bool), evidence: make(map[string]policy.Current),
@@ -133,10 +186,12 @@ func (d *Daemon) configure(ctx context.Context, cfg Config) error {
 	if err := d.policy.Recover(); err != nil {
 		return fmt.Errorf("recover policy engine: %w", err)
 	}
-	d.threads, err = thread.Open(ctx, d.store, d.threadHooks())
+	d.recorder = newEventRecorder(d.store)
+	d.children, err = children.Open(ctx, d.store, cfg.ChildLimits, d.threadHooks(), d.recorder)
 	if err != nil {
 		return fmt.Errorf("open thread machine: %w", err)
 	}
+	d.threads = d.children.Threads()
 	if err := d.threads.Restart(ctx); err != nil {
 		return fmt.Errorf("restart thread machine: %w", err)
 	}
@@ -152,27 +207,27 @@ func (d *Daemon) configure(ctx context.Context, cfg Config) error {
 		return fmt.Errorf("open Direct driver: %w", err)
 	}
 	d.git = gitops.NewWithEvidence(d.decideGit, nil)
-	d.adapter, err = d.newAdapter(cfg)
-	if err != nil {
-		return fmt.Errorf("open engine adapter: %w", err)
+	d.defaults = routing.Pair{Harness: cfg.DefaultHarness, Model: cfg.DefaultModel}
+	d.taskKind, d.routeData, d.projects, d.poll, d.noLoop = cfg.TaskKind, cfg.Evidence, cfg.Projects, cfg.poll, cfg.noLoop
+	if d.taskKind == "" {
+		d.taskKind = "coding"
+	}
+	if d.poll <= 0 {
+		d.poll = 200 * time.Millisecond
+	}
+	if d.defaultWatch, d.projectWatch, err = resolveWatch(cfg); err != nil {
+		return err
+	}
+	if d.retryBase = cfg.retryBase; d.retryBase <= 0 {
+		d.retryBase = time.Second
+	}
+	if err := d.openHarnesses(cfg); err != nil {
+		return fmt.Errorf("open engine adapters: %w", err)
+	}
+	if err := d.openRemote(cfg.Remote); err != nil {
+		return fmt.Errorf("open remote driver: %w", err)
 	}
 	return nil
-}
-
-// newAdapter uses the capability-closed Codex declaration unless a test injects a fake.
-func (d *Daemon) newAdapter(cfg Config) (engine.EngineAdapter, error) {
-	sink := engineSink{daemon: d}
-	if cfg.adapter != nil {
-		return cfg.adapter(sink)
-	}
-	binary := cfg.CodexBinary
-	if binary == "" {
-		binary = "codex"
-	}
-	launcher := deferredLauncher{open: sync.OnceValues(func() (*codex.DirectLauncher, error) {
-		return codex.NewDirectLauncher(policyDriver{ExecutionDriver: d.driver, daemon: d}, binary)
-	})}
-	return codex.New(launcher, sink, nil)
 }
 
 // --- Server lifecycle: stop admission before draining work and storage ---
@@ -191,13 +246,17 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}
 	port := fmt.Sprint(listener.Addr().(*net.TCPAddr).Port)
 	server := api.New(api.Config{
-		Store: d.store, Threads: d.threads, Tokens: d.tokens, Policy: d.policy, Port: port,
+		Store: d.store, Threads: d.threads, Tokens: d.tokens, Policy: d.policy, Port: port, WaitingFor: d.waitingFor,
 		DiskPressure: d.pressure.Load,
 	}).HTTPServer()
 	httpCtx, stopHTTP := context.WithCancel(context.Background())
 	server.BaseContext = func(net.Listener) context.Context { return httpCtx }
 	server.RegisterOnShutdown(stopHTTP)
 	d.server, d.listenAddr = server, listener.Addr()
+	if !d.noLoop {
+		d.workers.Add(1)
+		go d.dispatchLoop()
+	}
 	d.mu.Unlock()
 	stop := context.AfterFunc(ctx, func() { _ = d.Close() })
 	defer stop()
@@ -225,6 +284,9 @@ func (d *Daemon) Close() error {
 		}
 		d.cancel()
 		d.workers.Wait()
+		if d.remote != nil {
+			d.closeErr = errors.Join(d.closeErr, d.remote.Close())
+		}
 		if d.supervisor != nil {
 			d.closeErr = errors.Join(d.closeErr, d.supervisor.Close())
 		}

@@ -2,8 +2,10 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"synch/internal/execdriver"
 	"synch/internal/gitops"
@@ -20,11 +22,41 @@ func (s policyState) Thread(id string) (policy.ThreadInfo, error) {
 		return policy.ThreadInfo{}, err
 	}
 	terminal := state.Phase == "completed" || state.Phase == "failed" || state.Phase == "abandoned" || state.Phase == "cancelled"
+	// Every top-level thread is a coordinator whatever it has been assigned (dec. 05);
+	// only its managed children run engines and commands, as builders.
 	role := "coordinator"
 	if state.Facts.ManagedParent != "" {
 		role = "builder"
 	}
-	return policy.ThreadInfo{ID: id, Parent: state.Facts.ManagedParent, Role: role, Managed: true, Terminal: terminal}, nil
+	info := policy.ThreadInfo{ID: id, Parent: state.Facts.ManagedParent, Role: role, Managed: true, Terminal: terminal}
+	if info.Parent != "" {
+		// A child inherits only grants issued before it was created (Q-21).
+		info.CreatedAt = s.daemon.createdAt(id)
+	}
+	return info, nil
+}
+
+// createdAt reads when a managed child was created from its thread.created record.
+func (d *Daemon) createdAt(id string) time.Time {
+	d.mu.Lock()
+	at, ok := d.created[id]
+	d.mu.Unlock()
+	if ok {
+		return at
+	}
+	events, err := d.store.ReadStream("thread:"+id, 0, 1<<20)
+	if err != nil {
+		return time.Time{}
+	}
+	for _, e := range events {
+		if e.Type == "thread.created" {
+			d.mu.Lock()
+			d.created[id] = e.RecordedAt
+			d.mu.Unlock()
+			return e.RecordedAt
+		}
+	}
+	return time.Time{}
 }
 
 // AccessMode identifies this daemon's local Host access target.
@@ -153,7 +185,68 @@ func (d policyDriver) Spawn(ctx context.Context, spec execdriver.ProcSpec) (exec
 		return nil, err
 	}
 	if !result.Allowed {
-		return nil, fmt.Errorf("authorize Host access: %s", result.Reason)
+		return nil, fmt.Errorf("authorize Host access: %w: %s", ErrPolicyDenied, result.Reason)
 	}
 	return proc, nil
+}
+
+// --- Grant before delegation (D-43): read the operator's grants, never issue them ---
+
+// hasGrant reports whether the thread holds an active Full Control grant for this
+// host and identity: a grant.issued on its stream that no grant.revoked names. The
+// daemon only reads the log here; grants come from the operator's `synch grants create`.
+func (d *Daemon) hasGrant(id string) (bool, error) {
+	host := d.driver.Describe()
+	issued, revoked := map[string]bool{}, map[string]bool{}
+	var cursor int64
+	for {
+		events, err := d.store.ReadStream("thread:"+id, cursor, 256)
+		if err != nil {
+			return false, err
+		}
+		for _, e := range events {
+			cursor = e.Seq
+			var p struct {
+				ID       string `json:"id"`
+				GrantID  string `json:"grant_id"`
+				Host     string `json:"host"`
+				Identity string `json:"identity"`
+			}
+			if json.Unmarshal(e.Payload, &p) != nil {
+				continue
+			}
+			switch e.Type {
+			case "grant.issued":
+				if p.Host == host.Host && p.Identity == host.Identity {
+					issued[p.ID] = true
+				}
+			case "grant.revoked":
+				revoked[p.GrantID] = true
+			}
+		}
+		if len(events) < 256 {
+			break
+		}
+	}
+	for grant := range issued {
+		if !revoked[grant] {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// waitingFor is the API's derived status detail for a queued thread: a coordinator
+// that has not delegated yet and holds no grant waits for the operator, and the text
+// names the exact command to run. It returns "" when nothing is awaited.
+func (d *Daemon) waitingFor(ctx context.Context, id string) string {
+	state, err := d.threads.Status(ctx, id)
+	if err != nil || state.Facts.ManagedParent != "" || len(state.Facts.Awaited) > 0 || d.driver == nil {
+		return ""
+	}
+	if ok, err := d.hasGrant(id); err != nil || ok {
+		return ""
+	}
+	host := d.driver.Describe()
+	return fmt.Sprintf("waiting for an operator grant: run `synch grants create %s --host %s --identity %s`", id, host.Host, host.Identity)
 }

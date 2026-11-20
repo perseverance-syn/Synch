@@ -198,7 +198,7 @@ func TestConcurrentReceipts(t *testing.T) {
 		t.Fatalf("first and replay: %d %v %s / %d %v %s", a.Code, a.Header(), a.Body, b.Code, b.Header(), b.Body)
 	}
 	head, err := store.Head()
-	if err != nil || head != 1 {
+	if err != nil || head != 2 { // the receipt acceptance and thread.created
 		t.Fatalf("head %d: %v", head, err)
 	}
 }
@@ -406,3 +406,26 @@ func TestAuthorityAndRollback(t *testing.T) {
 }
 
 var _ http.Handler = (*Server)(nil)
+
+// TestCreateThreadWritesCreationFact proves card 113 G4: the API writes the catalogue
+// thread.created with project and depth at creation, in the creating transaction, and an
+// idempotent replay does not write it again.
+func TestCreateThreadWritesCreationFact(t *testing.T) {
+	s, store, _ := fixture(t)
+	id := create(t, s, "creation-fact")
+	create(t, s, "creation-fact") // same request ID: a replay
+	events, err := store.ReadStream("thread:"+id, 0, 16)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var created []string
+	for _, e := range events {
+		if e.Type == "thread.created" {
+			created = append(created, string(e.Payload))
+		}
+	}
+	if len(created) != 1 || !strings.Contains(created[0], `"project_id":"p1"`) || !strings.Contains(created[0], `"depth":0`) ||
+		!strings.Contains(created[0], `"role":"coordinator"`) {
+		t.Fatalf("thread.created events: %v", created)
+	}
+}

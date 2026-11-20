@@ -24,8 +24,8 @@ type Adapter struct {
 
 // Declaration reports the ACP compatibility floor and untested operations.
 func Declaration() engine.CapabilitySet {
-	// The matrix does not identify an installed CLI release. The protocol is checked at initialize.
-	caps := stdio.Declaration("kimi", "*")
+	// The matrix does not identify a CLI release floor, so any release routes; the ACP protocol is checked at initialize. The name is the contract's `kimi-code` harness.
+	caps := stdio.Declaration("kimi-code", ">=0.0")
 	caps.Ops[engine.UsageOp] = engine.Capability{Status: engine.Untested, Reason: "Kimi ACP does not report token usage"}
 	return caps
 }

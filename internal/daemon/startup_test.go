@@ -32,15 +32,15 @@ func TestNewFailsClosedOnPolicyRecovery(t *testing.T) {
 	}
 }
 
-// TestDefaultCodexCapabilityGate proves AC2 denies the shipped unqualified start.
+// TestDefaultCodexCapabilityGate proves AC2 never launches the shipped, unqualified Codex.
 func TestDefaultCodexCapabilityGate(t *testing.T) {
 	cfg, _ := gateConfig(t)
 	cfg.adapter = nil
 	cfg.CodexBinary = filepath.Join(cfg.DataDir, "must-not-be-executed")
 	d, base := serveGate(t, cfg)
-	id := gateThread(t, base, "unqualified")
-	err := d.StartAssignment(t.Context(), engine.StartRequest{ThreadID: id})
-	if !errors.Is(err, engine.ErrUnavailable) {
+	id := childOf(t, d, gateThread(t, base, "unqualified"))
+	err := d.StartAssignment(t.Context(), engine.StartRequest{ThreadID: id, Workdir: t.TempDir()})
+	if !errors.Is(err, ErrNoEligiblePair) {
 		t.Fatalf("unqualified start returned %v", err)
 	}
 }

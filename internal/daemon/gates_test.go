@@ -8,8 +8,10 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -28,21 +30,31 @@ type fakeAdapter struct {
 
 type fakeSession struct {
 	engine.Session
-	sink   engine.Sink
-	req    engine.StartRequest
-	events chan engine.EngineEvent
+	sink    engine.Sink
+	req     engine.StartRequest
+	events  chan engine.EngineEvent
+	stopped chan struct{}
+	stop    sync.Once
 }
 
-// Capabilities qualifies only the start and stream operations used by these gates.
+// fakeCaps qualifies the fake harness for routing on this host, for tests only.
+func fakeCaps() engine.CapabilitySet {
+	ops := map[string]engine.Capability{}
+	for _, op := range []string{engine.StartOp, engine.SendOp, engine.StreamOp, engine.StopOp, engine.SkillDeliveryOp} {
+		ops[op] = engine.Capability{Status: engine.Qualified}
+	}
+	return engine.CapabilitySet{Version: "1.0.0", Adapter: "fake", HarnessVersions: ">=1.0.0 <2.0.0",
+		OS: runtime.GOOS, Models: []string{"m1"}, Ops: ops}
+}
+
+// Capabilities qualifies the fake for routing.
 func (*fakeAdapter) Capabilities(context.Context) (engine.CapabilitySet, error) {
-	return engine.CapabilitySet{Ops: map[string]engine.Capability{
-		engine.StartOp: {Status: engine.Qualified}, engine.StreamOp: {Status: engine.Qualified},
-	}}, nil
+	return fakeCaps(), nil
 }
 
 // Start captures the request and exposes a controllable stream.
 func (f *fakeAdapter) Start(_ context.Context, req engine.StartRequest) (engine.Session, error) {
-	s := &fakeSession{sink: f.sink, req: req, events: make(chan engine.EngineEvent, 16)}
+	s := &fakeSession{sink: f.sink, req: req, events: make(chan engine.EngineEvent, 16), stopped: make(chan struct{})}
 	f.next <- s
 	return s, nil
 }
@@ -54,7 +66,10 @@ func (f *fakeSession) Ref() string { return f.req.AssignmentID }
 func (f *fakeSession) Events() (<-chan engine.EngineEvent, error) { return f.events, nil }
 
 // Stop settles the in-memory session.
-func (*fakeSession) Stop(context.Context) error { return nil }
+func (f *fakeSession) Stop(context.Context) error {
+	f.stop.Do(func() { close(f.stopped) })
+	return nil
+}
 
 // output persists and delivers one adapter output event.
 func (f *fakeSession) output(t *testing.T, message string) {
@@ -80,6 +95,7 @@ func gateConfig(t *testing.T) (Config, <-chan *fakeSession) {
 		{"id":"dispatch","effect":"allow","actions":["assign.dispatch"]}]}`)
 	return Config{
 		DataDir: dir, Listen: "127.0.0.1:0", Tokens: tokens, PolicyStore: filepath.Join(dir, "policy.json"),
+		DefaultHarness: "fake", DefaultModel: "m1", noLoop: true,
 		adapter: func(sink engine.Sink) (engine.EngineAdapter, error) {
 			return &fakeAdapter{sink: sink, next: starts}, nil
 		},
@@ -238,8 +254,8 @@ func gateHistory(t *testing.T, d *Daemon, id string) []eventlog.Event {
 func TestGateDisconnectAndRestart(t *testing.T) {
 	cfg, starts := gateConfig(t)
 	d, base := serveGate(t, cfg)
-	id := gateThread(t, base, "disconnect")
-	if err := d.StartAssignment(t.Context(), engine.StartRequest{ThreadID: id}); err != nil {
+	id := childOf(t, d, gateThread(t, base, "disconnect"))
+	if err := d.StartAssignment(t.Context(), engine.StartRequest{ThreadID: id, Workdir: t.TempDir()}); err != nil {
 		t.Fatal(err)
 	}
 	session := <-starts
@@ -287,33 +303,12 @@ func TestGateDisconnectAndRestart(t *testing.T) {
 	}
 }
 
-// finishGateReview records a passing check and accepts that revision through HTTP.
-func finishGateReview(t *testing.T, d *Daemon, base, id, revision string) {
-	t.Helper()
-	if err := d.threads.Update(t.Context(), id, func(f *thread.Facts) error {
-		f.Revision, f.EvaluatedRevision = revision, revision
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := d.record(id, "check.result", map[string]string{"check": "gate", "status": "passed", "revision": revision}, ""); err != nil {
-		t.Fatal(err)
-	}
-	if err := d.record(id, "audit.status", map[string]string{"status": "pass", "revision": revision}, ""); err != nil {
-		t.Fatal(err)
-	}
-	if err := d.threads.Apply(t.Context(), id, thread.Command{Transition: "T26"}); err != nil {
-		t.Fatal(err)
-	}
-	gateMutation(t, base+"/v1/threads/"+id+"/commands", "accept-"+id, fmt.Sprintf(`{"command":"accept","revision":%q}`, revision), 202)
-}
-
 // TestGateRolloverContinues proves AC5 checkpoints and starts a new session.
 func TestGateRolloverContinues(t *testing.T) {
 	cfg, starts := gateConfig(t)
 	d, base := serveGate(t, cfg)
-	id := gateThread(t, base, "rollover")
-	req := engine.StartRequest{ThreadID: id}
+	id := childOf(t, d, gateThread(t, base, "rollover"))
+	req := engine.StartRequest{ThreadID: id, Workdir: t.TempDir()}
 	if err := d.StartAssignment(t.Context(), req); err != nil {
 		t.Fatal(err)
 	}
@@ -329,12 +324,16 @@ func TestGateRolloverContinues(t *testing.T) {
 		t.Fatalf("invalid continuation: %+v", second.req)
 	}
 	second.output(t, "continued")
+	if err := d.threads.Update(t.Context(), id, func(f *thread.Facts) error { f.Revision = revision; return nil }); err != nil {
+		t.Fatal(err)
+	}
 	second.events <- engine.EngineEvent{Channel: "exit"}
+	// The daemon runs the (missing) gate file and moves to awaiting_acceptance itself.
 	waitGate(t, func() bool {
 		s, err := d.threads.Status(t.Context(), id)
-		return err == nil && s.Phase == "verifying"
+		return err == nil && s.Phase == "awaiting_acceptance"
 	})
-	finishGateReview(t, d, base, id, revision)
+	gateMutation(t, base+"/v1/threads/"+id+"/commands", "accept-"+id, fmt.Sprintf(`{"command":"accept","revision":%q}`, revision), 202)
 	s, err := d.threads.Status(t.Context(), id)
 	if err != nil || s.Phase != "completed" || s.Checkpoint.URI == "" {
 		t.Fatalf("rollover completion: %+v, %v", s, err)

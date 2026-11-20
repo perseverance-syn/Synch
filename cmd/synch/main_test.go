@@ -44,3 +44,36 @@ func TestRunRoutesOperatorCommands(t *testing.T) {
 		t.Fatalf("runner returned %d with stderr %q", code, stderr.String())
 	}
 }
+
+// TestDaemonConfig proves D6: the SYNCH_* settings map into the daemon config,
+// and a bare environment is a valid configuration.
+func TestDaemonConfig(t *testing.T) {
+	cfg, err := daemonConfig(func(string) string { return "" }, "data", nil)
+	if err != nil || cfg.DataDir != "data" || cfg.DefaultHarness != "" || cfg.Projects != nil {
+		t.Fatalf("bare config %+v, %v", cfg, err)
+	}
+	env := map[string]string{
+		"SYNCH_CODEX_BIN": "/bin/codex", "SYNCH_CLAUDE_BIN": "/bin/claude", "SYNCH_KIMI_BIN": "/bin/kimi",
+		"SYNCH_DEFAULT_HARNESS": "codex", "SYNCH_DEFAULT_MODEL": "gpt", "SYNCH_PROJECTS": `{"app":{"dir":"/src/app"}}`,
+	}
+	cfg, err = daemonConfig(func(k string) string { return env[k] }, "data", nil)
+	if err != nil || cfg.CodexBinary != "/bin/codex" || cfg.ClaudeBinary != "/bin/claude" || cfg.KimiBinary != "/bin/kimi" ||
+		cfg.DefaultHarness != "codex" || cfg.DefaultModel != "gpt" || cfg.Projects["app"].Dir != "/src/app" {
+		t.Fatalf("config %+v, %v", cfg, err)
+	}
+	env["SYNCH_PROJECTS"] = "{"
+	if _, err = daemonConfig(func(k string) string { return env[k] }, "data", nil); err == nil {
+		t.Fatal("malformed SYNCH_PROJECTS accepted")
+	}
+}
+
+// TestWatchdogConfig proves the env defaults and the per-project fields reach the daemon config.
+func TestWatchdogConfig(t *testing.T) {
+	env := map[string]string{"SYNCH_CHILD_MAX_RUNTIME": "90m", "SYNCH_CHILD_LOOP_REPEATS": "off",
+		"SYNCH_PROJECTS": `{"app":{"dir":"/src","max_runtime":"45m","loop_repeats":8}}`}
+	cfg, err := daemonConfig(func(k string) string { return env[k] }, "data", nil)
+	if err != nil || cfg.ChildMaxRuntime != "90m" || cfg.ChildLoopRepeats != "off" ||
+		cfg.Projects["app"].MaxRuntime != "45m" || cfg.Projects["app"].LoopRepeats != "8" {
+		t.Fatalf("watchdog config %+v, %v", cfg, err)
+	}
+}

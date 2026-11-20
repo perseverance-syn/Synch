@@ -164,3 +164,35 @@ func replayedText(header string) string {
 	}
 	return "false"
 }
+
+// printWaiting adds a plain-words line for each thread whose status says it is
+// waiting for the operator (the daemon's derived waiting_for detail, which names
+// the exact command to run). It prints nothing in --json mode, where the field is
+// already in the raw body, and nothing for threads that wait on nothing.
+func (p *printer) printWaiting(body []byte) error {
+	if p.json {
+		return nil
+	}
+	var page struct {
+		Threads []waitingThread `json:"threads"`
+		waitingThread
+	}
+	if json.Unmarshal(body, &page) != nil {
+		return nil
+	}
+	for _, t := range append(page.Threads, page.waitingThread) {
+		if t.WaitingFor == "" {
+			continue
+		}
+		if _, err := fmt.Fprintf(p.stdout, "thread %s is %s\n", t.ID, t.WaitingFor); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// waitingThread is the part of a thread view printWaiting reads.
+type waitingThread struct {
+	ID         string `json:"id"`
+	WaitingFor string `json:"waiting_for"`
+}

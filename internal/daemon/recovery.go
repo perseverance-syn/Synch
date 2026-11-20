@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"synch/internal/engine"
 	"synch/internal/eventlog"
@@ -18,19 +19,39 @@ const processTable = "CREATE TABLE IF NOT EXISTS daemon_processes (id TEXT PRIMA
 // prior runs. Normal cancellation remains tied to the live session registry.
 func (d *Daemon) threadHooks() thread.Hooks {
 	allow := func(context.Context, *eventlog.Transaction, thread.State) (bool, error) { return true, nil }
-	return thread.Hooks{Limits: allow, Policy: allow, Pair: allow, ConfirmGone: d.confirmGone}
+	return thread.Hooks{Limits: allow, Policy: allow, Pair: d.pairHook, ConfirmGone: d.confirmGone}
 }
 
-// confirmGone records the first recovery pass and checks current work thereafter.
-func (d *Daemon) confirmGone(_ context.Context, id string) (bool, error) {
+// confirmGone records the first recovery pass. Thereafter it stops the thread's
+// live engine session and waits for it to settle, so a cancelled child's work is
+// gone before the parent's T30 completes. The wait is bounded because this runs
+// inside the event writer.
+// ponytail: an adapter whose Stop appends to the log waits out the bound; cancel outside the writer if that bites.
+func (d *Daemon) confirmGone(ctx context.Context, id string) (bool, error) {
 	d.mu.Lock()
-	defer d.mu.Unlock()
 	if !d.confirmed {
 		d.recovering[id] = true
+		d.mu.Unlock()
 		return false, nil
 	}
-	return d.sessions[id] == nil, nil
+	active := d.sessions[id]
+	d.mu.Unlock()
+	if active == nil {
+		return true, nil
+	}
+	active.cancel()
+	select {
+	case <-active.done:
+		return true, nil
+	case <-time.After(settleWait):
+		return false, nil
+	case <-ctx.Done():
+		return false, ctx.Err()
+	}
 }
+
+// settleWait bounds how long T30 waits for a session to stop.
+const settleWait = 5 * time.Second
 
 // recoverProcesses probes recorded identities and only then resumes thread recovery.
 func (d *Daemon) recoverProcesses(ctx context.Context) error {
@@ -69,6 +90,9 @@ func (d *Daemon) recoverProcesses(ctx context.Context) error {
 	}
 	d.confirmed = true
 	for id := range d.recovering {
+		if err := d.classifyDispatch(ctx, id); err != nil {
+			return fmt.Errorf("classify interrupted dispatch for %s: %w", id, err)
+		}
 		if err := d.threads.Recover(ctx, id); err != nil {
 			return fmt.Errorf("resume recovery for %s: %w", id, err)
 		}
@@ -141,4 +165,25 @@ func (d *Daemon) record(id, kind string, payload any, endedRun string) error {
 		_, err = tx.ExecContext(ctx, "INSERT OR REPLACE INTO daemon_processes(id, record) VALUES(?, NULL)", endedRun)
 		return err
 	})
+}
+
+// classifyDispatch makes a coordinator's interrupted dispatch recoverable without an
+// operator. A coordinator takes T05 without any process and parks with T08 right
+// after, so a crash between the two (T24 -> paused(daemon_recovery)) leaves an
+// assignment that no process.exited ever classified, and G.4 would hold it paused.
+// Nothing ran, so the dispatch is recorded as resumable (T22 -> queued). The parent
+// then resumes: with a child recorded (Facts.Awaited) it parks on that child, else
+// it delegates again, and no second child is created for the same dispatch.
+func (d *Daemon) classifyDispatch(ctx context.Context, id string) error {
+	state, err := d.threads.Status(ctx, id)
+	if err != nil {
+		return err
+	}
+	assignment := state.Facts.Assignment
+	if state.Facts.ManagedParent != "" || state.Interrupted != "running" || assignment == "" || state.Work[assignment] != "" {
+		return nil
+	}
+	return d.record(id, "process.exited", map[string]any{
+		"assignment_id": assignment, "execution_outcome": "lost_on_reboot", "work": "resumable",
+	}, "")
 }
