@@ -55,7 +55,18 @@ func (c CapabilitySet) Copy() CapabilitySet {
 }
 
 // Require checks qualification and synchronously records a denied operation.
+// A request with an empty identifier returns a typed validation error and
+// persists nothing, because a denial fact with empty IDs is corrupt history.
+// (Nonempty but malformed IDs are out of this guard's scope; the adapter's
+// command validation rejects those separately.)
 func (c CapabilitySet) Require(sink Sink, assignmentID, threadID, operation string) error {
+	if assignmentID == "" || threadID == "" {
+		field := "thread_id"
+		if assignmentID == "" {
+			field = "assignment_id"
+		}
+		return &InvalidRequestError{Field: field, Reason: "must not be empty"}
+	}
 	if c.Ops[operation].Status == Qualified {
 		return nil
 	}

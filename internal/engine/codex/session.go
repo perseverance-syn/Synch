@@ -26,8 +26,13 @@ type session struct {
 	closeOnce              sync.Once
 	abortOnce              sync.Once
 	stopping               atomic.Bool
+	// quit closes when shutdown starts (Stop, abort); from then on persisted
+	// outputs are no longer handed to the consumer, so shutdown never waits
+	// for the stream to drain.
+	quit     chan struct{}
+	quitOnce sync.Once
 
-	mu                       sync.Mutex
+	mu                    sync.Mutex
 	failure                  error
 	ref, turnID, completedID string
 	starting                 bool
@@ -43,7 +48,8 @@ var _ engine.Session = (*session)(nil)
 func newSession(a *Adapter, req engine.StartRequest, t Transport) *session {
 	s := &session{adapter: a, transport: t, assignmentID: req.AssignmentID, threadID: req.ThreadID,
 		events: make(chan engine.EngineEvent, eventBuffer+1), done: make(chan struct{}),
-		writes: make(chan fields), lane: make(chan struct{}, 1), items: make(map[string]itemState)}
+		writes: make(chan fields), lane: make(chan struct{}, 1), items: make(map[string]itemState),
+		quit: make(chan struct{})}
 	go s.writeLoop()
 	go s.readLoop()
 	return s
@@ -135,21 +141,35 @@ func (s *session) Interrupt(ctx context.Context) error {
 	return s.call(ctx, "turn/interrupt", fields{"threadId": ref, "turnId": turn}, nil)
 }
 
-// Stop unsubscribes the engine session, then asks the supervisor to terminate its tree.
+// Stop unsubscribes the engine session, then asks the supervisor to terminate
+// its tree. A started session can always be stopped, so routing cannot strand
+// a live process behind an unqualified capability; the gate still applies to a
+// handle that was never started, which has no session to stop.
 func (s *session) Stop(ctx context.Context) error {
-	if err := s.require(engine.StopOp); err != nil {
-		return err
+	if s.transport == nil {
+		if err := s.require(engine.StopOp); err != nil {
+			return err
+		}
+		return errors.New("stop of a session that was never started")
 	}
 	if s.stopping.Load() {
 		return s.awaitExit(ctx)
 	}
 	if err := s.acquire(ctx); err != nil {
+		// A caller that waited for the slot while another Stop finished gets
+		// that stop's result, so concurrent Stop callers agree (K3).
+		if s.stopping.Load() {
+			return s.awaitExit(ctx)
+		}
 		return err
 	}
 	defer s.release()
 	if s.stopping.Load() {
 		return s.awaitExit(ctx)
 	}
+	// The reader must stay free to process the unsubscribe reply even when the
+	// consumer has stopped reading a full stream.
+	s.stopDelivery()
 	err := s.call(ctx, "thread/unsubscribe", fields{"threadId": s.Ref()}, s.confirmUnsubscribe)
 	if err != nil {
 		s.fail(err)
@@ -261,6 +281,16 @@ func (s *session) acquire(ctx context.Context) error {
 
 // release frees the request slot for the next session operation.
 func (s *session) release() { <-s.lane }
+
+// stopDelivery ends live delivery once shutdown starts. Every later output is
+// still persisted; only its live hand-off to the consumer is skipped.
+func (s *session) stopDelivery() {
+	s.quitOnce.Do(func() {
+		if s.quit != nil {
+			close(s.quit)
+		}
+	})
+}
 
 // awaitExit waits for the process result to have been persisted by the supervisor.
 func (s *session) awaitExit(ctx context.Context) error {

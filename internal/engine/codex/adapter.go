@@ -79,11 +79,23 @@ func (a *Adapter) Resume(ctx context.Context, ref string, req engine.StartReques
 
 // open gates launches, checks the installed release, and prepares a session or cleans up its process.
 func (a *Adapter) open(ctx context.Context, req engine.StartRequest, ref, operation string) (engine.Session, error) {
+	// Identifiers are validated before any denial is recorded, so a malformed
+	// request persists nothing invalid.
+	if err := validateSessionIDs(req); err != nil {
+		return nil, err
+	}
 	if err := a.caps.Require(a.sink, req.AssignmentID, req.ThreadID, operation); err != nil {
 		return nil, err
 	}
-	if req.AssignmentID == "" || req.ThreadID == "" {
-		return nil, errors.New("assignment and thread IDs are required")
+	if operation == engine.StartOp {
+		// Routing (dec. 03) requires start, send, stream and stop: a session
+		// the daemon cannot always send to, stream from, and stop must never
+		// be handed out.
+		for _, op := range []string{engine.SendOp, engine.StreamOp, engine.StopOp} {
+			if err := a.caps.Require(a.sink, req.AssignmentID, req.ThreadID, op); err != nil {
+				return nil, err
+			}
+		}
 	}
 	if err := engine.ValidateEnv(req.Env); err != nil {
 		return nil, err
@@ -119,6 +131,20 @@ func (a *Adapter) open(ctx context.Context, req engine.StartRequest, ref, operat
 		return nil, err
 	}
 	return s, nil
+}
+
+// validateSessionIDs refuses a request whose identifiers are empty and
+// therefore cannot appear in schema-valid facts, before any denial is
+// recorded for it. (Nonempty but malformed IDs are rejected later, during
+// command validation.)
+func validateSessionIDs(req engine.StartRequest) error {
+	if req.AssignmentID == "" {
+		return &engine.InvalidRequestError{Field: "assignment_id", Reason: "must not be empty"}
+	}
+	if req.ThreadID == "" {
+		return &engine.InvalidRequestError{Field: "thread_id", Reason: "must not be empty"}
+	}
+	return nil
 }
 
 // checkVersion accepts the single stable release in the declared patch interval.

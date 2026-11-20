@@ -221,6 +221,7 @@ func (s *session) closedError() error {
 // abort requests cleanup asynchronously so request cancellation can return even with blocked I/O.
 func (s *session) abort() {
 	s.abortOnce.Do(func() {
+		s.stopDelivery()
 		go func() {
 			_ = cancelProcess(s.transport)
 			s.closeTransport()

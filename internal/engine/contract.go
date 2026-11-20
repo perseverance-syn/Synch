@@ -80,6 +80,24 @@ type EngineEvent struct {
 // ErrUnavailable identifies an operation the capability declaration does not qualify.
 var ErrUnavailable = errors.New("engine: operation unavailable")
 
+// ErrInvalidRequest identifies a session request the caller can correct and retry.
+var ErrInvalidRequest = errors.New("engine: invalid session request")
+
+// InvalidRequestError reports a session request field that cannot produce
+// schema-valid facts, so the adapter refuses it without recording anything.
+type InvalidRequestError struct {
+	Field  string
+	Reason string
+}
+
+// Error names the rejected field and its reason.
+func (e *InvalidRequestError) Error() string {
+	return fmt.Sprintf("%s: %s: %s", ErrInvalidRequest, e.Field, e.Reason)
+}
+
+// Unwrap supports errors.Is matching of the invalid-request sentinel.
+func (e *InvalidRequestError) Unwrap() error { return ErrInvalidRequest }
+
 // HarnessError identifies failures callers map to harness_unavailable.
 type HarnessError struct {
 	Operation string
@@ -111,17 +129,30 @@ func ValidateEnv(env map[string]string) error {
 	return nil
 }
 
-// CredentialName identifies known infrastructure and authentication environment keys.
+// CredentialName identifies known infrastructure and authentication environment
+// keys. A name is a credential when it is one of the exact names, starts with
+// the AWS_BEARER_TOKEN_ prefix, contains _PRIVATE_KEY anywhere (so a private
+// key path such as SNOWFLAKE_PRIVATE_KEY_PATH is covered), or ends with a
+// credential suffix (_TOKEN, _TOKEN_FILE, _SECRET_KEY, _API_KEY, _ACCESS_KEY,
+// _PASSWORD, _SECRET, _PRIVATE_KEY, _KEY, _CREDENTIALS).
 func CredentialName(name string) bool {
 	name = strings.ToUpper(name)
 	switch name {
 	case "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_SECURITY_TOKEN",
 		"AWS_PROFILE", "AWS_SHARED_CREDENTIALS_FILE", "GOOGLE_APPLICATION_CREDENTIALS", "GOOGLE_CREDENTIALS",
 		"AZURE_CLIENT_SECRET", "AZURE_CLIENT_CERTIFICATE_PATH", "AZURE_FEDERATED_TOKEN_FILE",
-		"SSH_AUTH_SOCK", "KUBECONFIG", "DATABASE_URL", "GITHUB_TOKEN", "GH_TOKEN", "GH_ENTERPRISE_TOKEN":
+		"SSH_AUTH_SOCK", "KUBECONFIG", "DATABASE_URL", "GITHUB_TOKEN", "GH_TOKEN", "GH_ENTERPRISE_TOKEN",
+		"PGPASSWORD", "APIKEY", "API_KEY", "DOCKER_AUTH_CONFIG":
 		return true
 	}
-	for _, suffix := range []string{"_TOKEN", "_TOKEN_FILE", "_API_KEY", "_ACCESS_KEY", "_PASSWORD", "_SECRET", "_PRIVATE_KEY", "_CREDENTIALS"} {
+	if strings.HasPrefix(name, "AWS_BEARER_TOKEN_") {
+		return true
+	}
+	if strings.Contains(name, "_PRIVATE_KEY") {
+		return true
+	}
+	for _, suffix := range []string{"_TOKEN", "_TOKEN_FILE", "_SECRET_KEY", "_API_KEY", "_ACCESS_KEY",
+		"_PASSWORD", "_SECRET", "_KEY", "_CREDENTIALS"} {
 		if strings.HasSuffix(name, suffix) {
 			return true
 		}

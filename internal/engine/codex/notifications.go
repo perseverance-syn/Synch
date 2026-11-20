@@ -3,7 +3,7 @@ package codex
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
+	"time"
 	"unicode/utf8"
 
 	"synch/internal/engine"
@@ -183,7 +183,9 @@ func toolItem(kind string) bool {
 	}
 }
 
-// output preserves all content in UTF-8 chunks and persists each chunk before publication.
+// output preserves all content in UTF-8 chunks and persists each chunk before
+// publication. Delivery blocks when the consumer falls behind, so the pipe's
+// backpressure reaches the harness instead of failing the session at a lag.
 func (s *session) output(channel, chunk string) error {
 	for len(chunk) > 0 {
 		end := min(len(chunk), engine.OutputCap)
@@ -199,10 +201,35 @@ func (s *session) output(channel, chunk string) error {
 		if s.adapter.caps.Ops[engine.StreamOp].Status != engine.Qualified {
 			continue
 		}
-		if len(s.events) >= eventBuffer {
-			return fmt.Errorf("event consumer exceeded the %d-event Codex buffer", eventBuffer)
-		}
-		s.events <- engine.EngineEvent{Channel: channel, Chunk: piece}
+		s.deliver(engine.EngineEvent{Channel: channel, Chunk: piece})
 	}
 	return nil
+}
+
+// deliver hands one persisted event to the consumer. While the stream holds
+// eventBuffer events it waits, so a slow consumer delays delivery and the
+// pipe's backpressure reaches the harness instead of losing output or ending
+// the session. The reader is the only sender until finish, so the last slot
+// stays free for the terminal event. Once shutdown starts (quit) the event is
+// not handed over: it is already persisted, and shutdown must not wait for
+// the consumer.
+func (s *session) deliver(ev engine.EngineEvent) {
+	if len(s.events) >= eventBuffer {
+		// ponytail: 1 ms poll while the consumer lags; a channel cannot wait
+		// for "one slot below capacity", and lag is the rare case.
+		tick := time.NewTicker(time.Millisecond)
+		defer tick.Stop()
+		for len(s.events) >= eventBuffer {
+			select {
+			case <-s.quit:
+				return
+			case <-tick.C:
+			}
+		}
+	}
+	select {
+	case <-s.quit:
+	default:
+		s.events <- ev
+	}
 }
