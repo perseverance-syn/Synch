@@ -70,3 +70,25 @@ func (t *threadRuns) recordExit(run *threadRun) {
 		close(t.drained)
 	}
 }
+
+// Reopen starts a new admission generation after the previous one drained cleanly.
+// A Spawn holding an old generation still sees its closed gate after a grant check.
+func (d *Direct) Reopen(threadID string) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	old := d.threads[threadID]
+	if old == nil {
+		return ErrThreadSettling
+	}
+	old.mu.Lock()
+	defer old.mu.Unlock()
+	select {
+	case <-old.drained:
+		if old.cleanupFailure == "" {
+			d.threads[threadID] = &threadRuns{active: make(map[*threadRun]struct{})}
+			return nil
+		}
+	default:
+	}
+	return ErrThreadSettling
+}

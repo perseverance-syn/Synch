@@ -263,6 +263,18 @@ func (s *Server) threadCommand(ctx context.Context, tx *eventlog.Transaction, ca
 		if action == "select_harness" {
 			break
 		}
+		if hook := s.config.ChangeMode; hook != nil {
+			command := ModeCommand{Actor: caller, Thread: id, Target: body["target"].(string), To: body["to"].(string)}
+			commit, settle, err := hook(ctx, tx, command)
+			if err != nil {
+				return queue.Decision{}, err
+			}
+			*after = settle
+			decision.Commit = func(ctx context.Context, tx *eventlog.Transaction) (any, error) {
+				return body, commit(ctx, tx)
+			}
+			break
+		}
 		decision.Commit = func(context.Context, *eventlog.Transaction) (any, error) { return body, nil }
 		*after = func(ctx context.Context) error {
 			return machine.Update(ctx, id, func(facts *thread.Facts) error {

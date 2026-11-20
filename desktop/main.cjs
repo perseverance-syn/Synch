@@ -198,6 +198,7 @@ ipcMain.handle('settings:get', async () => {
 })
 ipcMain.handle('settings:save', saveSettings)
 ipcMain.handle('settings:forget', forgetToken)
+ipcMain.handle('app:version', () => `${app.getVersion()} (Electron ${process.versions.electron})`)
 ipcMain.handle('api:request', apiRequest)
 ipcMain.handle('stream:open', openStream)
 ipcMain.handle('stream:close', closeStream)

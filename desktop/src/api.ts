@@ -17,6 +17,7 @@ type Bridge = {
   getSettings(): Promise<{ url: string; hasToken: boolean }>
   saveSettings(url: string, token: string): Promise<void>
   forgetToken(): Promise<void>
+  getVersion(): Promise<string>
   request(req: { method: string; path: string; body?: unknown; requestId?: string }): Promise<RawResponse>
   openStream(stream: string, after: number): Promise<number>
   closeStream(handle: number): Promise<void>
@@ -86,7 +87,7 @@ export type Receipt = {
   http_status: number
   thread_id?: string
   event_seq?: number
-  result?: { thread_id?: string; submission?: { brief?: string } }
+  result?: { thread_id?: string; approval_id?: string; submission?: { brief?: string } }
 }
 
 /** CommandResult is what the UI shows after a command: the receipt plus its request id. */
@@ -113,6 +114,7 @@ export type ThreadView = {
   depth: number
   pause_reason?: string
   revision?: string
+  worktree_digest?: string
   plan_digest?: string
   harness?: string
   model?: string

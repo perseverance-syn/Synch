@@ -152,10 +152,11 @@ func TestSessionGuidanceAndRolloverHandoff(t *testing.T) {
 func TestHarnessSwitchHandoff(t *testing.T) {
 	tree := gateWorktree(t)
 	cfg, starts := handoffConfig(t, tree)
-	d, base := serveGate(t, cfg)
 	other := make(chan *fakeSession, 4)
-	d.harnesses = append(d.harnesses, &harness{name: "fake2", version: "1.0.0",
-		adapter: secondAdapter{&fakeAdapter{sink: engineSink{daemon: d}, next: other}}})
+	cfg.Adapters = append(cfg.Adapters, func(sink engine.Sink) (engine.EngineAdapter, error) {
+		return secondAdapter{&fakeAdapter{sink: sink, next: other}}, nil
+	})
+	d, base := serveGate(t, cfg)
 	parent := gateThread(t, base, "switch")
 	id := childOf(t, d, parent)
 	req := engine.StartRequest{ThreadID: id, Workdir: tree}

@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('synch', {
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (url, token) => ipcRenderer.invoke('settings:save', { url, token }),
   forgetToken: () => ipcRenderer.invoke('settings:forget'),
+  getVersion: () => ipcRenderer.invoke('app:version'),
   request: (req) => ipcRenderer.invoke('api:request', req),
   openStream: (stream, after) => ipcRenderer.invoke('stream:open', { stream, after }),
   closeStream: (handle) => ipcRenderer.invoke('stream:close', handle),

@@ -96,9 +96,9 @@ func gateConfig(t *testing.T) (Config, <-chan *fakeSession) {
 	return Config{
 		DataDir: dir, Listen: "127.0.0.1:0", Tokens: tokens, PolicyStore: filepath.Join(dir, "policy.json"),
 		DefaultHarness: "fake", DefaultModel: "m1", noLoop: true,
-		adapter: func(sink engine.Sink) (engine.EngineAdapter, error) {
+		Adapters: []func(engine.Sink) (engine.EngineAdapter, error){func(sink engine.Sink) (engine.EngineAdapter, error) {
 			return &fakeAdapter{sink: sink, next: starts}, nil
-		},
+		}},
 		freeSpace: func(string) (uint64, uint64, error) { return 80 << 30, 100 << 30, nil },
 	}, starts
 }

@@ -15,6 +15,7 @@ import (
 	"synch/internal/api"
 	"synch/internal/children"
 	sctx "synch/internal/context"
+	"synch/internal/credentials"
 	"synch/internal/engine"
 	"synch/internal/engine/claudecode"
 	"synch/internal/eventlog"
@@ -54,6 +55,8 @@ type Config struct {
 	Projects map[string]ProjectConfig
 	// Remote registers the remote execution driver when set.
 	Remote *RemoteConfig
+	// Sandbox registers a sandbox driver with tested filesystem, credential and network boundaries.
+	Sandbox SandboxDriver
 	// ChildMaxRuntime is the daemon-wide longest a managed child's engine session may
 	// run, as a Go duration (default 2h); "0" or "off" disables the budget. A project's
 	// max_runtime wins. ChildLoopRepeats is the same for how many consecutive identical
@@ -68,8 +71,14 @@ type Config struct {
 	OutputCap int
 	// ChildLimits overrides the Q-27 child limits (depth 3, concurrency 4, attempts 3); zero keeps each default.
 	ChildLimits children.Limits
+	// Credentials brokers secrets at use and redacts every known value from events,
+	// retained output and engine prompts (card 401). Nil opens the OS keychain of this
+	// machine, or the failing fallback when there is none.
+	Credentials *credentials.Broker
 
-	adapter   func(engine.Sink) (engine.EngineAdapter, error)
+	// Adapters replaces built-in adapters when non-nil. Factories receive the durable event sink.
+	// Injected adapters remain subject to capability, routing, policy and grant checks.
+	Adapters  []func(engine.Sink) (engine.EngineAdapter, error)
 	freeSpace func(string) (free, total uint64, err error)
 	poll      time.Duration
 	retryBase time.Duration
@@ -88,6 +97,8 @@ type Daemon struct {
 	policy       *policy.Engine
 	harnesses    []*harness
 	driver       *execdriver.Direct
+	sandbox      SandboxDriver
+	dispatchMu   sync.Mutex
 	remote       *remote.Driver
 	remoteID     string
 	permits      chan claudecode.PermissionRequest
@@ -109,6 +120,7 @@ type Daemon struct {
 	dataDir      string
 	roles        *roles.Registry
 	outputs      *sctx.Store
+	creds        *credentials.Broker
 	host         string
 	port         string
 	tokens       api.TokenVerifier
@@ -157,14 +169,19 @@ func New(cfg Config) (daemon *Daemon, err error) {
 	if err := os.MkdirAll(dataDir, 0700); err != nil {
 		return nil, fmt.Errorf("create data directory: %w", err)
 	}
-	store, err := eventlog.Open(filepath.Join(dataDir, "events.db"))
+	creds := cfg.Credentials
+	if creds == nil {
+		creds = credentials.NewBroker(credentials.OpenOS(), nil)
+	}
+	// Every event payload, from any component, is redacted of known secrets before persist.
+	store, err := eventlog.Open(filepath.Join(dataDir, "events.db"), creds.Redactor().EventPayload)
 	if err != nil {
 		return nil, fmt.Errorf("open event store: %w", err)
 	}
 	lifetime, cancel := context.WithCancel(context.Background())
 	d := &Daemon{
 		failed: make(map[string]*dispatchFailure), settled: make(map[string]bool), created: make(map[string]time.Time), unrunnable: make(map[string]bool), verifying: make(map[string]bool), worktrees: make(map[string]string),
-		store: store, dataDir: dataDir, host: host, port: port, tokens: cfg.Tokens,
+		store: store, creds: creds, dataDir: dataDir, host: host, port: port, tokens: cfg.Tokens,
 		lifetime: lifetime, cancel: cancel, sessions: make(map[string]*assignment),
 		recovering: make(map[string]bool), evidence: make(map[string]policy.Current),
 	}
@@ -192,6 +209,15 @@ func (d *Daemon) configure(ctx context.Context, cfg Config) error {
 			return fmt.Errorf("load policy store: %w", err)
 		}
 		d.rules = []*policy.File{file}
+	}
+	if err := d.store.Write(ctx, func(tx *eventlog.Transaction) error {
+		_, err := tx.ExecContext(ctx, modeTable)
+		return err
+	}); err != nil {
+		return fmt.Errorf("open execution modes: %w", err)
+	}
+	if cfg.Sandbox != nil && cfg.Sandbox.Kind() == execdriver.KindSandbox && len(cfg.Sandbox.Describe().CertifiedConfigs) > 0 {
+		d.sandbox = cfg.Sandbox
 	}
 	d.policy = policy.New(d.store, policyState{daemon: d}, time.Now)
 	if err := d.policy.Recover(); err != nil {
@@ -225,6 +251,8 @@ func (d *Daemon) configure(ctx context.Context, cfg Config) error {
 	if d.outputs, err = sctx.NewStore(filepath.Join(d.dataDir, "outputs"), cfg.OutputCap); err != nil {
 		return fmt.Errorf("open output store: %w", err)
 	}
+	d.outputs.SetRedactor(d.creds.Redactor())
+	d.creds.SetAuthorizer(d.authorizeSecret)
 	d.git = gitops.NewWithEvidence(d.decideGit, nil)
 	d.defaults = routing.Pair{Harness: cfg.DefaultHarness, Model: cfg.DefaultModel}
 	d.taskKind, d.routeData, d.projects, d.poll, d.noLoop = cfg.TaskKind, cfg.Evidence, cfg.Projects, cfg.poll, cfg.noLoop
@@ -246,7 +274,7 @@ func (d *Daemon) configure(ctx context.Context, cfg Config) error {
 	if err := d.openRemote(cfg.Remote); err != nil {
 		return fmt.Errorf("open remote driver: %w", err)
 	}
-	return nil
+	return d.resumeModePauses(ctx)
 }
 
 // --- Server lifecycle: stop admission before draining work and storage ---
@@ -266,7 +294,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	port := fmt.Sprint(listener.Addr().(*net.TCPAddr).Port)
 	server := api.New(api.Config{
 		Store: d.store, Threads: d.threads, Tokens: d.tokens, Policy: d.policy, Port: port, WaitingFor: d.waitingFor,
-		DiskPressure: d.pressure.Load,
+		DiskPressure: d.pressure.Load, ChangeMode: d.prepareMode,
 	}).HTTPServer()
 	httpCtx, stopHTTP := context.WithCancel(context.Background())
 	server.BaseContext = func(net.Listener) context.Context { return httpCtx }

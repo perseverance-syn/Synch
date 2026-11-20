@@ -99,7 +99,7 @@ func eventsOf(t *testing.T, d *Daemon, id, kind string) []map[string]any {
 // real daemon pauses the thread with no_eligible_pair and dispatches nothing.
 func TestShippedDeclarationsPause(t *testing.T) {
 	cfg, _ := loopConfig(t, t.TempDir())
-	cfg.adapter = nil
+	cfg.Adapters = nil
 	cfg.CodexBinary = filepath.Join(cfg.DataDir, "absent-codex")
 	cfg.ClaudeBinary = filepath.Join(cfg.DataDir, "absent-claude")
 	cfg.KimiBinary = filepath.Join(cfg.DataDir, "absent-kimi")
@@ -134,7 +134,7 @@ func (failingAdapter) Start(context.Context, engine.StartRequest) (engine.Sessio
 // TestHarnessStartFailurePauses proves D2: a harness that cannot start is T15.
 func TestHarnessStartFailurePauses(t *testing.T) {
 	cfg, _ := gateConfig(t)
-	cfg.adapter = func(engine.Sink) (engine.EngineAdapter, error) { return &failingAdapter{}, nil }
+	cfg.Adapters = []func(engine.Sink) (engine.EngineAdapter, error){func(engine.Sink) (engine.EngineAdapter, error) { return &failingAdapter{}, nil }}
 	d, base := serveGate(t, cfg)
 	id := childOf(t, d, gateThread(t, base, "failing"))
 	err := d.StartAssignment(t.Context(), engine.StartRequest{ThreadID: id, Workdir: t.TempDir()})

@@ -139,3 +139,34 @@ func waitForTestSignal(t *testing.T, ch <-chan struct{}) {
 		t.Fatal("timed out waiting for process or grant check")
 	}
 }
+
+// TestReopenRequiresCleanSettlement proves Direct admission advances only after confirmed cleanup.
+func TestReopenRequiresCleanSettlement(t *testing.T) {
+	proc := newTestProcess()
+	driver := &Direct{
+		grants: grantFunc(func(context.Context, string, string, string) (bool, error) { return true, nil }),
+		start:  func(ProcSpec) (Proc, error) { return proc, nil },
+	}
+	if err := driver.Reopen("thread"); err == nil {
+		t.Fatal("reopened without settling")
+	}
+	if _, err := driver.Spawn(t.Context(), ProcSpec{ThreadID: "thread"}); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, _ = driver.Settle(ctx, "thread")
+	if err := driver.Reopen("thread"); err == nil {
+		t.Fatal("reopened while a tree was running")
+	}
+	close(proc.done)
+	if report, err := driver.Settle(t.Context(), "thread"); err != nil || !report.HostProcessesStopped {
+		t.Fatalf("settle = %+v, %v", report, err)
+	}
+	if err := driver.Reopen("thread"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := driver.Spawn(t.Context(), ProcSpec{ThreadID: "thread"}); err != nil {
+		t.Fatal(err)
+	}
+}

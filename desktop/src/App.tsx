@@ -6,6 +6,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, bridge, get, unreachable, type Health } from './api'
 import { reconnectNow, startFollow, useLive } from './store'
 import { ThreadsView, LiveOutput, roleColor } from './Threads'
+import { ApprovalsView } from './Approvals'
+import { FindingsView } from './Findings'
+import { DiffsView, MachinesView, SettingsView } from './Others'
 
 /** View is one entry of the rail's Views list. */
 export type View = 'Threads' | 'Live output' | 'Diffs' | 'Approvals' | 'Findings' | 'Machines' | 'Settings'
@@ -129,6 +132,12 @@ export function Shell({ url }: { url: string }) {
   const roleCounts = new Map<string, number>()
   for (const t of live.threads.values()) if (t.projectId === current) roleCounts.set(t.role, (roleCounts.get(t.role) ?? 0) + 1)
 
+  // Rail badges: waiting approvals and grouped findings.
+  const badge: Partial<Record<View, number>> = {
+    Approvals: live.approvalRequests.filter((r) => r.status === 'pending').length,
+    Findings: live.findings.size,
+  }
+
   const down = health.isError && unreachable(health.error)
   const rejected = health.error instanceof ApiError && health.error.status === 401
   const seq = Math.max(live.cursor, health.data?.head_global_seq ?? 0)
@@ -165,6 +174,7 @@ export function Shell({ url }: { url: string }) {
         {VIEWS.map((v) => (
           <button key={v} className={`rail-item ${v === view ? 'active' : ''}`} onClick={() => setView(v)}>
             {v}
+            {badge[v] ? <span className={v === 'Approvals' ? 'badge amber' : 'badge'}>{badge[v]}</span> : null}
           </button>
         ))}
         <h6>Departments</h6>
@@ -220,8 +230,11 @@ export function Shell({ url }: { url: string }) {
             <LiveOutput lines={live.output} streaming={live.streaming} tall />
           </section>
         )}
+        {view === 'Approvals' && <ApprovalsView />}
+        {view === 'Findings' && <FindingsView />}
+        {view === 'Diffs' && <DiffsView />}
+        {view === 'Machines' && <MachinesView />}
         {view === 'Settings' && <SettingsView url={url} />}
-        {!['Threads', 'Live output', 'Settings'].includes(view) && <ComingSoon view={view} />}
       </main>
     </div>
   )
@@ -244,44 +257,6 @@ function Banner({ children }: { children: ReactNode }) {
       <span className="banner-icon">!</span>
       {children}
     </div>
-  )
-}
-
-// SettingsView shows the connection and lets the operator replace the stored token.
-function SettingsView({ url }: { url: string }) {
-  return (
-    <section className="page">
-      <div className="page-head">
-        <h1>Settings</h1>
-      </div>
-      <div className="panel-box settings">
-        <div>
-          <h6>Daemon</h6>
-          <p className="mono">{url}</p>
-          <p className="muted">Token stored with OS secure storage. Closing the desktop leaves the daemon running.</p>
-        </div>
-        <button className="btn" onClick={() => void bridge().forgetToken().then(() => location.reload())}>
-          Change daemon or token
-        </button>
-      </div>
-      <p className="muted pad">More settings arrive with card 202b.</p>
-    </section>
-  )
-}
-
-// ComingSoon is the styled placeholder for views delivered by card 202b.
-function ComingSoon({ view }: { view: View }) {
-  return (
-    <section className="page">
-      <div className="page-head">
-        <h1>{view}</h1>
-      </div>
-      <div className="coming">
-        <div className="coming-icon">◇</div>
-        <h2>{view} is coming in 202b</h2>
-        <p className="muted">It will share this shell. Threads and Live output are live now.</p>
-      </div>
-    </section>
   )
 }
 

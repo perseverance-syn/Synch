@@ -30,7 +30,7 @@ type threadView struct {
 	Model        string `json:"model,omitempty"`
 	Audit        string `json:"audit_status,omitempty"`
 	// WaitingFor is a derived, read-only note on a queued thread: what the operator must
-	// do before the daemon can delegate it (see Config.WaitingFor). It is not machine state.
+	// do before the daemon can dispatch it (see Config.WaitingFor). It is not machine state.
 	WaitingFor string `json:"waiting_for,omitempty"`
 	LastSeq    int64  `json:"last_seq"`
 }
@@ -110,7 +110,10 @@ func (s *Server) hydrate(ctx context.Context, v *threadView) error {
 	if err != nil {
 		return err
 	}
-	v.Role, v.State, v.PauseReason = "coordinator", state.Phase, state.Reason
+	if v.Role == "" {
+		v.Role = "coordinator"
+	}
+	v.State, v.PauseReason = state.Phase, state.Reason
 	v.BriefVersion, v.PlanDigest, v.Revision = state.Facts.BriefVersion, state.Facts.PlanDigest, state.Facts.Revision
 	v.Audit = state.Audit
 	if s.config.WaitingFor != nil && state.Phase == "queued" {
@@ -146,7 +149,39 @@ func (s *Server) listThreads(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"threads": filtered})
 }
 
-// getThread returns one indexed thread with its current lifecycle status.
+// managedThreadView reads project, role and depth from the durable child creation fact.
+func (s *Server) managedThreadView(id string) (threadView, error) {
+	var cursor int64
+	for {
+		events, err := s.config.Store.ReadStream("thread:"+id, cursor, 32)
+		if err != nil {
+			return threadView{}, err
+		}
+		for _, e := range events {
+			cursor = e.Seq
+			if e.Type != "thread.created" || e.TypeVersion != 1 {
+				continue
+			}
+			var created struct {
+				Project string `json:"project_id"`
+				Parent  string `json:"parent_thread_id"`
+				Role    string `json:"role"`
+				Depth   int    `json:"depth"`
+			}
+			if err := json.Unmarshal(e.Payload, &created); err != nil {
+				return threadView{}, err
+			}
+			if created.Parent != "" {
+				return threadView{ID: id, ProjectID: created.Project, Role: created.Role, Depth: created.Depth}, nil
+			}
+		}
+		if len(events) < 32 {
+			return threadView{}, thread.ErrMissing
+		}
+	}
+}
+
+// getThread returns one coordinator or managed child with its current lifecycle status.
 func (s *Server) getThread(w http.ResponseWriter, r *http.Request, id string) {
 	if !ulidPattern.MatchString(id) {
 		writeProblem(w, newProblem(404, "not_found", ""))
@@ -158,18 +193,22 @@ func (s *Server) getThread(w http.ResponseWriter, r *http.Request, id string) {
 		writeProblem(w, newProblem(500, "internal", ""))
 		return
 	}
-	if len(views) == 0 {
-		writeProblem(w, newProblem(404, "not_found", ""))
-		return
+	var view threadView
+	if len(views) > 0 {
+		view = views[0]
+	} else {
+		view, err = s.managedThreadView(id)
 	}
-	err = s.hydrate(ctx, &views[0])
+	if err == nil {
+		err = s.hydrate(ctx, &view)
+	}
 	switch {
 	case errors.Is(err, thread.ErrMissing), errors.Is(err, sql.ErrNoRows):
 		writeProblem(w, newProblem(404, "not_found", ""))
 	case err != nil:
 		writeProblem(w, newProblem(500, "internal", ""))
 	default:
-		writeJSON(w, views[0])
+		writeJSON(w, view)
 	}
 }
 

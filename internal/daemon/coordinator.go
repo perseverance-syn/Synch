@@ -70,8 +70,14 @@ func (d *Daemon) coordinate(ctx context.Context, id string) error {
 	if len(kids) == 0 {
 		// Grant before delegation (D-43): a child inherits only grants issued before it
 		// exists, so without one the parent stays queued until the operator grants.
-		if ok, err := d.hasGrant(id); err != nil || !ok {
+		mode, err := d.modeFor(ctx, id)
+		if err != nil || mode.pending != "" {
 			return err
+		}
+		if mode.active == hostMode {
+			if ok, err := d.hasGrant(id); err != nil || !ok {
+				return err
+			}
 		}
 		revision := headRevision(ctx, req.Workdir)
 		if revision == "" {
@@ -364,6 +370,11 @@ func (d *Daemon) recordChildResult(ctx context.Context, id, outcome string, extr
 	}
 	r := children.Result{ChildThreadID: id, AssignmentID: a.AssignmentID, Outcome: outcome, Revision: revision,
 		Checks: checks, Limitations: []string{}, OpenRequirements: extra}
+	if direct, err := d.ranDirect(id); err != nil {
+		return err
+	} else if direct {
+		r.Limitations = append(r.Limitations, DirectLimitation)
+	}
 	for _, group := range []string{"failed", "error", "partial", "not_run"} {
 		for _, c := range checks[group] {
 			r.OpenRequirements = append(r.OpenRequirements, c.Check+": "+c.Reason)

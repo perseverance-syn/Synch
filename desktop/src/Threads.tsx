@@ -21,7 +21,7 @@ const ROLE_COLORS: Record<string, string> = {
 export const roleColor = (role: string): string => ROLE_COLORS[role] ?? '#8b8d93'
 
 // cap capitalises a role for chips.
-const cap = (s: string) => s[0].toUpperCase() + s.slice(1)
+export const cap = (s: string) => s[0].toUpperCase() + s.slice(1)
 
 const STATE_PILLS: Record<string, { icon: string; label: string; tone: string }> = {
   draft: { icon: '○', label: 'draft', tone: 'plain' },
@@ -51,7 +51,7 @@ export function StatePill({ state, reason }: { state: string; reason?: string })
   )
 }
 
-const EXECUTION: Record<string, string> = { direct: 'Host access', remote: 'Remote', sandbox: 'Sandbox' }
+export const EXECUTION: Record<string, string> = { direct: 'Host access', remote: 'Remote', sandbox: 'Sandbox' }
 const AUDIT: Record<string, string> = {
   off: 'Audit off',
   pending: 'Audit pending',
@@ -61,7 +61,7 @@ const AUDIT: Record<string, string> = {
   error: 'Audit error',
 }
 
-const CHECKS: Record<CheckStatus, { icon: string; label: string; tone: string }> = {
+export const CHECKS: Record<CheckStatus, { icon: string; label: string; tone: string }> = {
   passed: { icon: '✓', label: 'passed', tone: 'green' },
   failed: { icon: '✕', label: 'failed', tone: 'red' },
   error: { icon: '!', label: 'error', tone: 'red' },
@@ -269,7 +269,7 @@ export function ThreadsView({ project, search }: { project: string; search: stri
 }
 
 // AuditPill shows the audit status in words; error is red.
-function AuditPill({ status }: { status?: string }) {
+export function AuditPill({ status }: { status?: string }) {
   if (!status) return <span className="muted">—</span>
   return <span className={`pill tag ${status === 'error' ? 'red-text' : ''}`}>{AUDIT[status] ?? `Audit ${status}`}</span>
 }

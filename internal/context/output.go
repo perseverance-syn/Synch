@@ -27,9 +27,21 @@ var refPattern = regexp.MustCompile(`^out_[0-9a-f]{32}$`)
 
 // Store retains full tool and check output on disk and hands agents capped excerpts.
 type Store struct {
-	dir string
-	cap int
+	dir    string
+	cap    int
+	redact Redactor
 }
+
+// Redactor wraps a writer so every known secret value is removed before a byte reaches
+// it (spec "Policy and credentials": redact known values from outputs and storage).
+// credentials.Redactor implements it.
+type Redactor interface {
+	Writer(io.Writer) io.WriteCloser
+}
+
+// SetRedactor makes Retain redact known secrets before writing to disk, so neither the
+// retained file, its digest, Search nor the excerpt can hold one. Call it before use.
+func (s *Store) SetRedactor(r Redactor) { s.redact = r }
 
 // Excerpt is what an agent receives in place of the full output.
 type Excerpt struct {
@@ -66,8 +78,9 @@ func NewStore(dir string, capBytes int) (*Store, error) {
 // path maps a validated reference to its file.
 func (s *Store) path(ref string) string { return filepath.Join(s.dir, ref+".out") }
 
-// Retain streams r to disk in full (never held in memory), then returns the capped excerpt:
-// head, the lines containing any keyword (case-insensitive) and tail, in output order.
+// Retain streams r to disk in full (never held in memory), redacted when a Redactor is set,
+// then returns the capped excerpt: head, the lines containing any keyword
+// (case-insensitive) and tail, in output order. Bytes and Digest describe the stored bytes.
 func (s *Store) Retain(r io.Reader, keywords ...string) (Excerpt, error) {
 	var id [16]byte
 	if _, err := rand.Read(id[:]); err != nil {
@@ -80,9 +93,23 @@ func (s *Store) Retain(r io.Reader, keywords ...string) (Excerpt, error) {
 	}
 	defer func() { _ = f.Close() }()
 	sum := sha256.New()
-	size, err := io.Copy(io.MultiWriter(f, sum), r)
+	var dst io.WriteCloser = nopCloser{io.MultiWriter(f, sum)}
+	if s.redact != nil {
+		dst = s.redact.Writer(dst)
+	}
+	_, err = io.Copy(dst, r)
+	if closeErr := dst.Close(); err == nil {
+		err = closeErr
+	}
 	if err == nil {
 		err = f.Sync()
+	}
+	var size int64
+	if err == nil {
+		var info os.FileInfo
+		if info, err = f.Stat(); err == nil {
+			size = info.Size()
+		}
 	}
 	if err != nil {
 		_ = os.Remove(s.path(ref))
@@ -153,6 +180,12 @@ func (s *Store) excerpt(f *os.File, size int64, ref string, keywords []string) (
 	}
 	return text, nil
 }
+
+// nopCloser gives a plain writer the Close the redaction hook expects.
+type nopCloser struct{ io.Writer }
+
+// Close does nothing; the file is closed by Retain.
+func (nopCloser) Close() error { return nil }
 
 // valid drops a UTF-8 sequence cut in half by a byte boundary.
 func valid(b []byte) string { return strings.ToValidUTF8(string(b), "") }

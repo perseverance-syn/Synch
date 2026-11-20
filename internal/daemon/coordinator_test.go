@@ -129,6 +129,10 @@ func TestCoordinatorDispatchesBuilderChild(t *testing.T) {
 		len(results[0]["checks"].(map[string]any)["passed"].([]any)) != 1 {
 		t.Fatalf("result record %v", results)
 	}
+	// Card 401 C4: a child that ran under Direct shows that native actions can exceed journal coverage.
+	if lim, _ := results[0]["limitations"].([]any); len(lim) != 1 || lim[0] != DirectLimitation {
+		t.Fatalf("result limitations %v", results[0]["limitations"])
+	}
 }
 
 // TestChildLaunchDeniedWithoutHostExecRule proves C5 test two: with the operator's grant but
@@ -141,9 +145,9 @@ func TestChildLaunchDeniedWithoutHostExecRule(t *testing.T) {
 	writeGateFile(t, cfg.DataDir, "policy.json", `{"policy_version":3,"source":"operator","rules":[
 		{"id":"dispatch","effect":"allow","actions":["assign.dispatch"]}]}`)
 	var daemon atomic.Pointer[Daemon]
-	cfg.adapter = func(sink engine.Sink) (engine.EngineAdapter, error) {
+	cfg.Adapters = []func(engine.Sink) (engine.EngineAdapter, error){func(sink engine.Sink) (engine.EngineAdapter, error) {
 		return &launchAdapter{fakeAdapter: fakeAdapter{sink: sink, next: starts}, daemon: &daemon}, nil
-	}
+	}}
 	d, base := serveGate(t, cfg)
 	daemon.Store(d)
 	parent := grantedThread(t, d, base, "denied", worktree)

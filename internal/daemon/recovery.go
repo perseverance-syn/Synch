@@ -19,7 +19,7 @@ const processTable = "CREATE TABLE IF NOT EXISTS daemon_processes (id TEXT PRIMA
 // prior runs. Normal cancellation remains tied to the live session registry.
 func (d *Daemon) threadHooks() thread.Hooks {
 	allow := func(context.Context, *eventlog.Transaction, thread.State) (bool, error) { return true, nil }
-	return thread.Hooks{Limits: allow, Policy: allow, Pair: d.pairHook, ConfirmGone: d.confirmGone}
+	return thread.Hooks{Limits: allow, Policy: d.modeDispatchAllowed, Pair: d.pairHook, ConfirmGone: d.confirmGone}
 }
 
 // confirmGone records the first recovery pass. Thereafter it stops the thread's

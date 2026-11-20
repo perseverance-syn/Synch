@@ -11,6 +11,7 @@
 //     retains the full output under a data directory, returns a head, a tail and the
 //     lines matching given keywords inside a configurable cap (default 16 KiB) and a
 //     reference id, and Search finds lines in a retained output by that reference.
+//     With SetRedactor, known secret values are removed before any byte reaches disk.
 //   - Handoff files (spec "Rollover and handoff" and thread-state-machine T13, T14,
 //     T35 and section 4): Handoff holds exactly the spec's list (brief version, plan,
 //     revision, pending edits, failed attempts, open decisions, uncertain external

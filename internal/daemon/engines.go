@@ -66,12 +66,23 @@ func lowerBound(declaration string) string {
 // policy-checked Direct driver, so no adapter can start a process by itself.
 func (d *Daemon) openHarnesses(cfg Config) error {
 	sink := engineSink{daemon: d}
-	if cfg.adapter != nil {
-		adapter, err := cfg.adapter(sink)
-		if err != nil {
-			return err
+	if cfg.Adapters != nil {
+		for _, factory := range cfg.Adapters {
+			if factory == nil {
+				return fmt.Errorf("nil adapter factory")
+			}
+			adapter, err := factory(sink)
+			if err != nil {
+				return err
+			}
+			if adapter == nil {
+				return fmt.Errorf("adapter factory returned nil")
+			}
+			if err := d.offer(cfg, adapter); err != nil {
+				return err
+			}
 		}
-		return d.offer(cfg, adapter)
+		return nil
 	}
 	driver := policyDriver{ExecutionDriver: d.driver, daemon: d}
 	qualification := func(name string) *engine.CapabilitySet {

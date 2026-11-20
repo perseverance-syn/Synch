@@ -77,6 +77,8 @@ func (d *Daemon) dispatchLoop() {
 // restart, so neither floods the event log; any other failure is retried with
 // exponential backoff (card 111 H5).
 func (d *Daemon) dispatchPending() {
+	d.dispatchMu.Lock()
+	defer d.dispatchMu.Unlock()
 	ids, err := d.threadsIn(d.lifetime, "any", "draft", "queued")
 	if err != nil {
 		if d.lifetime.Err() == nil {
@@ -99,6 +101,10 @@ func (d *Daemon) dispatchPending() {
 		if err != nil || state.BlockedBy != "" {
 			continue
 		}
+		mode, err := d.modeFor(d.lifetime, id)
+		if err != nil || mode.pending != "" {
+			continue
+		}
 		if state.Facts.ManagedParent == "" {
 			d.noteDispatch(id, d.coordinate(d.lifetime, id))
 			continue
@@ -108,7 +114,7 @@ func (d *Daemon) dispatchPending() {
 		}
 		req, err := d.requestFor(d.lifetime, id)
 		if err == nil {
-			err = d.StartAssignment(d.lifetime, req)
+			err = d.startAssignment(d.lifetime, req)
 		}
 		if err != nil && d.childDispatchFailed(d.lifetime, id, err) {
 			err = nil

@@ -29,6 +29,7 @@ func (s policyState) Thread(id string) (policy.ThreadInfo, error) {
 		role = "builder"
 	}
 	info := policy.ThreadInfo{ID: id, Parent: state.Facts.ManagedParent, Role: role, Managed: true, Terminal: terminal}
+	info.Children = state.Facts.Awaited
 	if info.Parent != "" {
 		// A child inherits only grants issued before it was created (Q-21).
 		info.CreatedAt = s.daemon.createdAt(id)
@@ -61,11 +62,14 @@ func (d *Daemon) createdAt(id string) time.Time {
 
 // AccessMode identifies this daemon's local Host access target.
 func (s policyState) AccessMode(id, _ string) (string, error) {
-	state, err := s.daemon.threads.Status(s.daemon.lifetime, id)
-	if state.Facts.SwitchToSandbox || state.Facts.SandboxActive {
-		return "sandbox", err
+	mode, err := s.daemon.modeFor(s.daemon.lifetime, id)
+	if err != nil || mode.pending != "" {
+		return sandboxMode, err // Refuse native operations throughout settlement.
 	}
-	return "full_control", err
+	if needed, err := s.daemon.needsOwnGrant(id, mode); err != nil || needed {
+		return sandboxMode, err
+	}
+	return mode.active, nil
 }
 
 // Policy supplies the trusted operator policy loaded at startup.
@@ -158,6 +162,22 @@ type policyDriver struct {
 func (d policyDriver) Spawn(ctx context.Context, spec execdriver.ProcSpec) (execdriver.Proc, error) {
 	d.daemon.decisionMu.Lock()
 	defer d.daemon.decisionMu.Unlock()
+	mode, err := d.daemon.modeFor(ctx, spec.ThreadID)
+	if err != nil {
+		return nil, err
+	}
+	if mode.pending != "" {
+		return nil, execdriver.ErrThreadSettling
+	}
+	if mode.active == sandboxMode {
+		if d.daemon.sandbox == nil {
+			return nil, errors.New("sandbox driver is unavailable")
+		}
+		return d.daemon.sandbox.Spawn(ctx, spec)
+	}
+	if needed, err := d.daemon.needsOwnGrant(spec.ThreadID, mode); err != nil || needed {
+		return nil, errors.Join(execdriver.ErrFullControlRequired, err)
+	}
 	host := d.Describe()
 	var proc execdriver.Proc
 	// Launching and recording the run completes before revocation can settle it.
@@ -241,10 +261,18 @@ func (d *Daemon) hasGrant(id string) (bool, error) {
 // names the exact command to run. It returns "" when nothing is awaited.
 func (d *Daemon) waitingFor(ctx context.Context, id string) string {
 	state, err := d.threads.Status(ctx, id)
-	if err != nil || state.Facts.ManagedParent != "" || len(state.Facts.Awaited) > 0 || d.driver == nil {
+	if err != nil || d.driver == nil {
 		return ""
 	}
-	if ok, err := d.hasGrant(id); err != nil || ok {
+	mode, err := d.modeFor(ctx, id)
+	if err != nil || mode.active != hostMode || mode.pending != "" {
+		return ""
+	}
+	if state.Facts.ManagedParent != "" {
+		if wait, err := d.needsOwnGrant(id, mode); err != nil || !wait {
+			return ""
+		}
+	} else if ok, err := d.hasGrant(id); err != nil || ok || len(state.Facts.Awaited) > 0 {
 		return ""
 	}
 	host := d.driver.Describe()

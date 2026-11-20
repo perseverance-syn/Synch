@@ -18,7 +18,8 @@ import (
 type RemoteConfig struct {
 	Registry *remote.Registry
 	Runner   string
-	Broker   remote.Broker
+	// Broker defaults to the daemon's credential broker (user secret "ssh/<runner>").
+	Broker remote.Broker
 }
 
 // openRemote registers the remote driver under the remote execution kind.
@@ -27,7 +28,11 @@ func (d *Daemon) openRemote(cfg *RemoteConfig) error {
 	if cfg == nil {
 		return nil
 	}
-	driver, err := remote.NewDriver(cfg.Registry, cfg.Runner, cfg.Broker, d.policy, d.store, filepath.Join(d.dataDir, "remote.db"))
+	broker := cfg.Broker
+	if broker == nil {
+		broker = d.creds.SSH()
+	}
+	driver, err := remote.NewDriver(cfg.Registry, cfg.Runner, broker, d.policy, d.store, filepath.Join(d.dataDir, "remote.db"))
 	if err != nil {
 		return err
 	}
@@ -40,6 +45,8 @@ func (d *Daemon) Driver(kind string) execdriver.ExecutionDriver {
 	switch {
 	case kind == execdriver.KindDirect:
 		return d.driver
+	case kind == execdriver.KindSandbox:
+		return d.sandbox
 	case kind == execdriver.KindRemote && d.remote != nil:
 		return d.remote
 	}

@@ -4,8 +4,15 @@
 // OS service installation, token provisioning and harness qualification belong
 // to their respective operators and components.
 //
+// Injected Config.Adapters use the same capability gate, routing eligibility, policy
+// and grant checks as built-in adapters; an unqualified adapter is not eligible.
+// Adapter implementations are trusted to mediate their own external actions.
+//
 // Wiring:
 //   - HTTP commands enter the API, queue and durable thread machine.
+//   - Mode commands pause the coordinator subtree (T18), settle sessions and process trees,
+//     and revoke Host grants before publishing Sandbox active and releasing T21.
+//     Existing Builders need their own fresh grant after a return to Host access.
 //   - Authority receipts stage policy events and publish only after SQLite commits.
 //   - Git operations pass live worktree evidence to the policy engine before dispatch.
 //   - Grant before delegation (D-43): a coordinator is not delegated until it holds an active
@@ -75,4 +82,12 @@
 //   - An optional remote driver is registered under the remote execution kind; a
 //     disconnected runner pauses new assignments and fresh approvals (T19).
 //   - Engine and supervisor facts enter the shared event log for SSE and recovery.
+//   - Credentials (internal/credentials, card 401): Config.Credentials (default: the OS
+//     keychain) brokers secrets at use. Every event payload is redacted of known values
+//     before persist (eventlog redactor hook), CapOutput redacts before writing to disk,
+//     engine instructions and skills are redacted before Start and a known value in Env
+//     refuses the launch. UseSecret derives the caller's role from thread facts: a
+//     coordinator is refused, a worker reads its own scope after policy secret.use. The
+//     remote driver defaults to the broker's SSH adapter. A child that ran under Direct
+//     lists DirectLimitation on its result (native actions can exceed journal coverage).
 package daemon

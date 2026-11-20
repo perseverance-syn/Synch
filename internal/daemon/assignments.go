@@ -12,6 +12,7 @@ import (
 
 	"synch/internal/engine"
 	"synch/internal/eventlog"
+	"synch/internal/execdriver"
 	"synch/internal/policy"
 	"synch/internal/thread"
 )
@@ -19,6 +20,7 @@ import (
 type assignment struct {
 	cancel         context.CancelFunc
 	done           chan struct{}
+	stopErr        error  // Published by closing done.
 	harness, model string // the routed pair, kept for the failure checkpoint
 	watch          watchLimits
 	skills         []thread.Skill // the pinned skills of this assignment, kept for the checkpoint (guarded by Daemon.mu)
@@ -31,6 +33,27 @@ type assignment struct {
 // coordinator and is refused (ErrCoordinatorOnly). A routing miss pauses the
 // thread (T06) and returns ErrNoEligiblePair; nothing is dispatched.
 func (d *Daemon) StartAssignment(ctx context.Context, req engine.StartRequest) error {
+	d.dispatchMu.Lock()
+	defer d.dispatchMu.Unlock()
+	return d.startAssignment(ctx, req)
+}
+
+// startAssignment starts work under the daemon dispatch fence.
+func (d *Daemon) startAssignment(ctx context.Context, req engine.StartRequest) error {
+	mode, err := d.modeFor(ctx, req.ThreadID)
+	if err != nil || mode.pending != "" {
+		return err
+	}
+	if wait, err := d.needsOwnGrant(req.ThreadID, mode); err != nil || wait {
+		return err
+	}
+	execution := execdriver.KindDirect
+	if mode.active == sandboxMode {
+		if d.sandbox == nil {
+			return nil
+		}
+		execution = execdriver.KindSandbox
+	}
 	req.AssignmentID = eventlog.NewID()
 	state, err := d.threads.Status(ctx, req.ThreadID)
 	if err != nil {
@@ -109,7 +132,7 @@ func (d *Daemon) StartAssignment(ctx context.Context, req engine.StartRequest) e
 	if err != nil {
 		return fmt.Errorf("load session guidance: %w", err)
 	}
-	remoteBound := d.remote != nil && state.Facts.RunnerID == d.remoteID
+	remoteBound := execution == execdriver.KindDirect && d.remote != nil && state.Facts.RunnerID == d.remoteID
 	return d.children.Dispatch(ctx, req.ThreadID, req.AssignmentID, eventlog.NewID(), func(_ context.Context, cp *thread.Checkpoint) error {
 		// Every session start, fresh or continued, gets guidance then the handoff, stable-first.
 		instructions, err := sessionInstructions(guidance, req, cp)
@@ -141,11 +164,16 @@ func (d *Daemon) StartAssignment(ctx context.Context, req engine.StartRequest) e
 			"assignment_id": req.AssignmentID, "harness": route.Pair.Harness, "model": route.Pair.Model,
 			"adapter_capabilities_version": capabilities.Version, "pinned": route.Pinned,
 			"routing_reason": route.RoutingReason, "input_revision": revision,
-			"execution": d.driver.Kind(), "target": host, "skills": pinPayload(pins),
+			"execution": execution, "target": host, "skills": pinPayload(pins),
 		}, ""); err != nil {
 			return err
 		}
-		session, err := h.adapter.Start(workCtx, req)
+		// Prompts leave the daemon only after known secrets are removed (card 401 C3).
+		sendReq, err := d.redactRequest(req)
+		if err != nil {
+			return err
+		}
+		session, err := h.adapter.Start(workCtx, sendReq)
 		if errors.Is(err, ErrPolicyDenied) {
 			// Policy refused the launch: nothing ran. The caller ends the child failed.
 			return fmt.Errorf("launch refused: %w", err)
@@ -230,7 +258,8 @@ func (d *Daemon) watchAssignment(ctx context.Context, req engine.StartRequest, a
 	for {
 		select {
 		case <-ctx.Done():
-			if err := stopSession(session); err != nil {
+			active.stopErr = stopSession(session)
+			if err := active.stopErr; err != nil {
 				slog.Error("stop assignment session", "thread_id", req.ThreadID, "error", err)
 			}
 			return
@@ -239,7 +268,9 @@ func (d *Daemon) watchAssignment(ctx context.Context, req engine.StartRequest, a
 			return
 		case event, ok := <-events:
 			if !ok {
-				if ctx.Err() == nil {
+				if ctx.Err() != nil {
+					active.stopErr = stopSession(session)
+				} else {
 					d.finishAssignment(ctx, req, active, false, "the engine's event stream ended without an exit", "exited")
 				}
 				return
