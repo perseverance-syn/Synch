@@ -110,7 +110,7 @@ func TestHealth(t *testing.T) {
 	s.config.DiskPressure = func() bool { return true }
 	w := request(t, s, "GET", "/v1/health", testToken, "", "")
 	body := decode[map[string]any](t, w.Body.Bytes())
-	if w.Code != 200 || body["api_version"] != "3.1.0" || body["log_epoch"] != epoch || body["head_global_seq"] != float64(2) ||
+	if w.Code != 200 || body["api_version"] != "3.2.1" || body["log_epoch"] != epoch || body["head_global_seq"] != float64(2) ||
 		body["status"] != "degraded" || body["disk_pressure"] != true {
 		t.Fatalf("health: %d %s", w.Code, w.Body)
 	}

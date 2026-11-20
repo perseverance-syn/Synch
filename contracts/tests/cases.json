@@ -2591,6 +2591,118 @@
      "thread_id"
     ]
    }
+  },
+  {
+   "name": "pos: approval.declined rejected",
+   "schema": "catalogue",
+   "expect": "valid",
+   "base": "thread_event",
+   "data": {
+    "type": "approval.declined",
+    "type_version": 1,
+    "payload": {
+     "request_id": "01JD3QA0000000000000000030",
+     "decision": "rejected",
+     "reason": "Target is production; wait for the change window",
+     "operator": "operator:alice"
+    }
+   }
+  },
+  {
+   "name": "pos: approval.declined changes_requested",
+   "schema": "catalogue",
+   "expect": "valid",
+   "base": "thread_event",
+   "data": {
+    "type": "approval.declined",
+    "type_version": 1,
+    "payload": {
+     "request_id": "01JD3QA0000000000000000030",
+     "decision": "changes_requested",
+     "reason": "Target is production; wait for the change window",
+     "operator": "operator:alice"
+    }
+   }
+  },
+  {
+   "name": "C1-neg: approval.declined unknown decision",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "approval.declined",
+    "type_version": 1,
+    "payload": {
+     "request_id": "01JD3QA0000000000000000030",
+     "decision": "approved",
+     "reason": "Target is production; wait for the change window",
+     "operator": "operator:alice"
+    }
+   }
+  },
+  {
+   "name": "C1-neg: approval.declined missing reason",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "approval.declined",
+    "type_version": 1,
+    "payload": {
+     "request_id": "01JD3QA0000000000000000030",
+     "decision": "rejected",
+     "operator": "operator:alice"
+    }
+   }
+  },
+  {
+   "name": "C1-neg: approval.declined empty reason",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "approval.declined",
+    "type_version": 1,
+    "payload": {
+     "request_id": "01JD3QA0000000000000000030",
+     "decision": "rejected",
+     "reason": "",
+     "operator": "operator:alice"
+    }
+   }
+  },
+  {
+   "name": "C1-neg: approval.declined request_id not a ULID",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "approval.declined",
+    "type_version": 1,
+    "payload": {
+     "request_id": "req-1",
+     "decision": "rejected",
+     "reason": "Target is production; wait for the change window",
+     "operator": "operator:alice"
+    }
+   }
+  },
+  {
+   "name": "C1-neg: approval.declined unknown field",
+   "schema": "catalogue",
+   "expect": "invalid",
+   "base": "thread_event",
+   "data": {
+    "type": "approval.declined",
+    "type_version": 1,
+    "payload": {
+     "request_id": "01JD3QA0000000000000000030",
+     "decision": "rejected",
+     "reason": "Target is production; wait for the change window",
+     "operator": "operator:alice",
+     "extra": 1
+    }
+   }
   }
  ]
 }

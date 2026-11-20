@@ -3,6 +3,7 @@ package esxi
 import (
 	"context"
 	"encoding/xml"
+	"errors"
 	"time"
 
 	"synch/internal/vmdriver"
@@ -112,4 +113,35 @@ func (d *Driver) FindByToken(ctx context.Context, endpoint, token, thread string
 		}
 	}
 	return evidence, nil
+}
+
+// VerifySnapshot confirms a unique listed snapshot of the live VM without reverting it.
+func (d *Driver) VerifySnapshot(ctx context.Context, endpoint, vm, name string) error {
+	obj := ref{"VirtualMachine", vm}
+	if !obj.valid("VirtualMachine") || name == "" {
+		return vmdriver.ErrSnapshot
+	}
+	s, err := d.open(ctx, endpoint)
+	if err != nil {
+		return errors.Join(vmdriver.ErrSnapshot, err)
+	}
+	defer s.close(ctx)
+	props, err := s.get(ctx, obj, "snapshot")
+	if err != nil {
+		return vmdriver.ErrSnapshot
+	}
+	var found snapshot
+	for _, snap := range snapshots(props) {
+		if snap.Name != name && snap.Ref.ID != name {
+			continue
+		}
+		if found.Ref.ID != "" {
+			return vmdriver.ErrSnapshot
+		}
+		found = snap
+	}
+	if !s.verify(ctx, obj, found) {
+		return vmdriver.ErrSnapshot
+	}
+	return nil
 }

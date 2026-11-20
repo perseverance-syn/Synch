@@ -2,6 +2,7 @@ package gitops
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -43,5 +44,33 @@ func TestReconciliationPolicyEvidence(t *testing.T) {
 	if merge.Action != Merge || merge.Revision != before || merge.WorktreeDigest != digestBefore ||
 		push.Action != Push || push.Revision != result.Revision || push.WorktreeDigest != digestAfter {
 		t.Fatalf("invalid reconciliation evidence: merge=%+v push=%+v", merge, push)
+	}
+}
+
+// TestBaseDiff proves the read-only diff covers committed and uncommitted tracked changes
+// since the merge base and leaves the worktree untouched.
+func TestBaseDiff(t *testing.T) {
+	f := newFixture(t)
+	s := New(allow, nil)
+	tree := f.thread(t, s, "diff")
+	baseRev := git(t, f.repo, "rev-parse", "main")
+	put(t, tree.Path(), sharedFile, strings.Replace(f.content, "alpha", "committed", 1))
+	git(t, tree.Path(), "commit", "-am", "edit")
+	// The base branch moving on must not leak into the thread diff.
+	put(t, f.repo, "other.txt", "other\n")
+	git(t, f.repo, "add", "other.txt")
+	git(t, f.repo, "commit", "-m", "other")
+	put(t, tree.Path(), sharedFile, strings.Replace(strings.Replace(f.content, "alpha", "committed", 1), "beta", "dirty", 1))
+	before := git(t, tree.Path(), "status", "--porcelain")
+	d, err := s.BaseDiff(t.Context(), tree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	patch := string(d.Patch)
+	if d.Base != baseRev || d.Revision != git(t, tree.Path(), "rev-parse", "HEAD") || !strings.Contains(patch, "+committed") || !strings.Contains(patch, "+dirty") || strings.Contains(patch, "other.txt") {
+		t.Fatalf("base %s revision %s patch %q", d.Base, d.Revision, patch)
+	}
+	if after := git(t, tree.Path(), "status", "--porcelain"); after != before {
+		t.Fatalf("BaseDiff changed the worktree: %q -> %q", before, after)
 	}
 }

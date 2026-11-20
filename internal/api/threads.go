@@ -1,11 +1,14 @@
 package api
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"maps"
 	"net/http"
+	"slices"
 	"synch/internal/eventlog"
 	"synch/internal/queue"
 	"synch/internal/thread"
@@ -32,7 +35,12 @@ type threadView struct {
 	// WaitingFor is a derived, read-only note on a queued thread: what the operator must
 	// do before the daemon can dispatch it (see Config.WaitingFor). It is not machine state.
 	WaitingFor string `json:"waiting_for,omitempty"`
-	LastSeq    int64  `json:"last_seq"`
+	// Checks groups the recorded check results of the evaluated revision by their five statuses
+	// (required checks with no result count as not_run). OpenRequirements lists what is still
+	// outstanding: required checks not passed and open decisions. Both are read-only.
+	Checks           map[string][]string `json:"checks,omitempty"`
+	OpenRequirements []openRequirement   `json:"open_requirements,omitempty"`
+	LastSeq          int64               `json:"last_seq"`
 }
 
 // createThread persists the coordinator and the API's submission metadata in the receipt writer.
@@ -119,6 +127,7 @@ func (s *Server) hydrate(ctx context.Context, v *threadView) error {
 	if s.config.WaitingFor != nil && state.Phase == "queued" {
 		v.WaitingFor = s.config.WaitingFor(ctx, v.ID)
 	}
+	v.Checks, v.OpenRequirements = checkSummary(state)
 	if state.SelectedHarness != nil {
 		v.Harness, v.Model = state.SelectedHarness.Harness, state.SelectedHarness.Model
 	}
@@ -220,4 +229,45 @@ func stringFieldFromRecord(record []byte, key string) string {
 		_ = json.Unmarshal(fields[key], &value)
 	}
 	return value
+}
+
+// openRequirement is one outstanding item on a thread: a required check or an open decision.
+type openRequirement struct {
+	Kind   string `json:"kind"` // check or decision
+	ID     string `json:"id"`
+	Status string `json:"status,omitempty"`
+}
+
+var checkStatuses = []string{"passed", "failed", "error", "partial", "not_run"}
+
+// checkSummary projects machine state into the optional checks and open_requirements fields.
+func checkSummary(s thread.State) (map[string][]string, []openRequirement) {
+	required := s.Facts.RequiredChecks
+	if len(s.Checks) == 0 && len(required) == 0 && len(s.Decisions) == 0 {
+		return nil, nil
+	}
+	groups := map[string][]string{}
+	for _, status := range checkStatuses {
+		groups[status] = []string{}
+	}
+	names := slices.Sorted(maps.Keys(s.Checks))
+	for _, name := range names {
+		groups[s.Checks[name]] = append(groups[s.Checks[name]], name)
+	}
+	var open []openRequirement
+	for _, name := range required {
+		status := s.Checks[name]
+		if status == "" {
+			groups["not_run"] = append(groups["not_run"], name)
+		}
+		if status != "passed" {
+			open = append(open, openRequirement{Kind: "check", ID: name, Status: cmp.Or(status, "not_run")})
+		}
+	}
+	for _, id := range slices.Sorted(maps.Keys(s.Decisions)) {
+		if s.Decisions[id] {
+			open = append(open, openRequirement{Kind: "decision", ID: id, Status: "open"})
+		}
+	}
+	return groups, open
 }

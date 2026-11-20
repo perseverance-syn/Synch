@@ -96,7 +96,7 @@ func (s *Server) executeMutation(ctx context.Context, req queue.Request, operati
 	if s.config.Policy != nil && (operation == "createApproval" || operation == "createGrant" || operation == "revokeGrant") {
 		return s.executePolicyMutation(ctx, req, operation)
 	}
-	if operation == "sendThreadCommand" {
+	if operation == "sendThreadCommand" || operation == "rejectApproval" || operation == "requestApprovalChanges" {
 		// Keep post-commit updates in receipt order and let same-process retries see them complete.
 		s.commandMu.Lock()
 		defer s.commandMu.Unlock()
@@ -156,6 +156,15 @@ func (s *Server) getReceipt(w http.ResponseWriter, r *http.Request, caller, id s
 
 // decide routes validated thread and authority operations within the queue writer.
 func (s *Server) decide(ctx context.Context, tx *eventlog.Transaction, caller, op string, params map[string]string, body map[string]any, after *func(context.Context) error) (queue.Decision, error) {
+	if op == "rejectApproval" || op == "requestApprovalChanges" {
+		if !ulidPattern.MatchString(params["request_id"]) {
+			return queue.Decision{}, &queue.Rejection{Code: "not_found"}
+		}
+		if s.config.Threads == nil {
+			return queue.Decision{}, errors.New("thread machine is unavailable")
+		}
+		return s.declineApproval(ctx, caller, op, params["request_id"], body, after)
+	}
 	id := params["thread_id"]
 	if id != "" && !ulidPattern.MatchString(id) {
 		return queue.Decision{}, invalid("invalid thread_id")
@@ -171,6 +180,9 @@ func (s *Server) decide(ctx context.Context, tx *eventlog.Transaction, caller, o
 	case "createApproval":
 		if !validApproval(body) {
 			return queue.Decision{}, invalid("invalid approval")
+		}
+		if err := s.checkCheckpoint(ctx, id, body); err != nil {
+			return queue.Decision{}, err
 		}
 	case "createGrant":
 		if !createGrantBody.valid(body) {

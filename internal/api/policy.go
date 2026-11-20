@@ -68,6 +68,9 @@ func (s *Server) preparePolicyMutation(ctx context.Context, req queue.Request, o
 		if !validApproval(body) {
 			return queue.Decision{}, nil, invalid("invalid approval")
 		}
+		if err := s.checkCheckpoint(ctx, id, body); err != nil {
+			return queue.Decision{}, nil, err
+		}
 		var input, approval policy.Approval
 		// The admitted body contains only client-supplied approval fields.
 		raw, marshalErr := json.Marshal(body)

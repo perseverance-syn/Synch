@@ -27,6 +27,7 @@ import (
 	"synch/internal/routing"
 	"synch/internal/supervisor"
 	"synch/internal/thread"
+	"synch/internal/vmdriver"
 )
 
 // Config supplies daemon storage, local authentication and launcher configuration.
@@ -78,6 +79,12 @@ type Config struct {
 	// machine, or the failing fallback when there is none.
 	Credentials *credentials.Broker
 
+	// VMDrivers maps a driver name to its VM driver. An approval whose rollback is a checkpoint
+	// reference (vmsnap:<driver>/<endpoint>/<vm>/<snapshot>) is admitted only if that driver
+	// verifies the snapshot. VMOwns reports whether a thread owns a VM (default: policy ownership).
+	VMDrivers map[string]vmdriver.VMDriver
+	VMOwns    func(thread, vm string) (bool, error)
+
 	// Adapters replaces built-in adapters when non-nil. Factories receive the durable event sink.
 	// Injected adapters remain subject to capability, routing, policy and grant checks.
 	Adapters  []func(engine.Sink) (engine.EngineAdapter, error)
@@ -89,44 +96,47 @@ type Config struct {
 
 // Daemon owns the components sharing one durable event store.
 type Daemon struct {
-	store        *eventlog.Store
-	threads      *thread.Machine
-	children     *children.Coordinator
-	recorder     *eventRecorder
-	created      map[string]time.Time // creation times of managed children, for grant inheritance
-	settled      map[string]bool      // ended children whose result is recorded
-	unrunnable   map[string]bool      // children being abandoned, which the pair guard refuses
-	policy       *policy.Engine
-	harnesses    []*harness
-	driver       *execdriver.Direct
-	sandbox      SandboxDriver
-	dispatchMu   sync.Mutex
-	remote       *remote.Driver
-	remoteID     string
-	permits      chan claudecode.PermissionRequest
-	defaults     routing.Pair
-	taskKind     string
-	routeData    []routing.Evidence
-	projects     map[string]ProjectConfig
-	poll         time.Duration
-	defaultWatch watchLimits
-	projectWatch map[string]watchLimits
-	noLoop       bool
-	failed       map[string]*dispatchFailure
-	verifying    map[string]bool
-	retryBase    time.Duration
-	worktrees    map[string]string
-	supervisor   *supervisor.Supervisor
-	git          *gitops.Service
-	rules        []*policy.File
-	dataDir      string
-	roles        *roles.Registry
-	outputs      *sctx.Store
-	creds        *credentials.Broker
-	host         string
-	port         string
-	tokens       api.TokenVerifier
-	pressure     atomic.Bool
+	store           *eventlog.Store
+	threads         *thread.Machine
+	children        *children.Coordinator
+	recorder        *eventRecorder
+	created         map[string]time.Time // creation times of managed children, for grant inheritance
+	settled         map[string]bool      // ended children whose result is recorded
+	unrunnable      map[string]bool      // children being abandoned, which the pair guard refuses
+	policy          *policy.Engine
+	harnesses       []*harness
+	driver          *execdriver.Direct
+	sandbox         SandboxDriver
+	dispatchMu      sync.Mutex
+	remote          *remote.Driver
+	remoteID        string
+	permits         chan claudecode.PermissionRequest
+	defaults        routing.Pair
+	taskKind        string
+	routeData       []routing.Evidence
+	projects        map[string]ProjectConfig
+	poll            time.Duration
+	defaultWatch    watchLimits
+	projectWatch    map[string]watchLimits
+	noLoop          bool
+	failed          map[string]*dispatchFailure
+	verifying       map[string]bool
+	retryBase       time.Duration
+	worktrees       map[string]string
+	worktreeProject map[string]gitops.Project
+	vmDrivers       map[string]vmdriver.VMDriver
+	vmOwns          func(thread, vm string) (bool, error)
+	supervisor      *supervisor.Supervisor
+	git             *gitops.Service
+	rules           []*policy.File
+	dataDir         string
+	roles           *roles.Registry
+	outputs         *sctx.Store
+	creds           *credentials.Broker
+	host            string
+	port            string
+	tokens          api.TokenVerifier
+	pressure        atomic.Bool
 
 	mu         sync.Mutex
 	server     *http.Server
@@ -182,7 +192,7 @@ func New(cfg Config) (daemon *Daemon, err error) {
 	}
 	lifetime, cancel := context.WithCancel(context.Background())
 	d := &Daemon{
-		failed: make(map[string]*dispatchFailure), settled: make(map[string]bool), created: make(map[string]time.Time), unrunnable: make(map[string]bool), verifying: make(map[string]bool), worktrees: make(map[string]string),
+		failed: make(map[string]*dispatchFailure), settled: make(map[string]bool), created: make(map[string]time.Time), unrunnable: make(map[string]bool), verifying: make(map[string]bool), worktrees: make(map[string]string), worktreeProject: make(map[string]gitops.Project),
 		store: store, creds: creds, dataDir: dataDir, host: host, port: port, tokens: cfg.Tokens,
 		lifetime: lifetime, cancel: cancel, sessions: make(map[string]*assignment),
 		recovering: make(map[string]bool), evidence: make(map[string]policy.Current),
@@ -255,6 +265,7 @@ func (d *Daemon) configure(ctx context.Context, cfg Config) error {
 	}
 	d.outputs.SetRedactor(d.creds.Redactor())
 	d.creds.SetAuthorizer(d.authorizeSecret)
+	d.vmDrivers, d.vmOwns = cfg.VMDrivers, cfg.VMOwns
 	d.git = gitops.NewWithEvidence(d.decideGit, nil)
 	d.defaults = routing.Pair{Harness: cfg.DefaultHarness, Model: cfg.DefaultModel}
 	d.taskKind, d.routeData, d.projects, d.poll, d.noLoop = cfg.TaskKind, cfg.Evidence, cfg.Projects, cfg.poll, cfg.noLoop
@@ -296,6 +307,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	port := fmt.Sprint(listener.Addr().(*net.TCPAddr).Port)
 	server := api.New(api.Config{
 		Store: d.store, Threads: d.threads, Tokens: d.tokens, Policy: d.policy, Port: port, WaitingFor: d.waitingFor,
+		Diff: d.threadDiff, VerifyCheckpoint: d.verifyCheckpoint, SearchOutput: d.searchOutput,
 		DiskPressure: d.pressure.Load, ChangeMode: d.prepareMode, EvidenceRedactor: d.creds.Redactor(), ExecutionDrivers: d.executionDrivers,
 	}).HTTPServer()
 	httpCtx, stopHTTP := context.WithCancel(context.Background())

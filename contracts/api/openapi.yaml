@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Synch local API
-  version: 3.1.0
+  version: 3.2.1
   summary: Loopback HTTP commands and SSE event stream shared by desktop and CLI.
   description: |
     Sources: spec "Persistent state", "Command semantics", "Release surface"; decisions 16, 22.
@@ -147,6 +147,150 @@ paths:
               schema: { type: string, contentEncoding: binary }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/Problem' }
+        '500': { $ref: '#/components/responses/Problem' }
+
+  /v1/threads/{thread_id}/diff:
+    get:
+      tags: [threads]
+      operationId: getDiff
+      summary: Worktree diff against the thread base
+      description: Tracked changes of the thread worktree since its merge base with the project base branch, with the base and the current revision. `patch` is size-capped; the full redacted diff stays retained and is searchable through `ref` (the output store of the daemon). A thread with no worktree is 404.
+      parameters:
+        - $ref: '#/components/parameters/ThreadId'
+      responses:
+        '200':
+          description: Diff
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Diff' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '500': { $ref: '#/components/responses/Problem' }
+
+  /v1/approvals:
+    get:
+      tags: [authority]
+      operationId: listApprovals
+      summary: List approval requests
+      description: A request is a `policy.decided` event with outcome `waiting_approval`; its `request_id` is the id of that event. `pending` has no later decision; `decided` carries the outcome (`approved`, `rejected`, `changes_requested`), actor and time.
+      parameters:
+        - { name: state, in: query, schema: { type: string, enum: [pending, decided] } }
+        - { name: thread, in: query, schema: { $ref: '#/components/schemas/Ulid' } }
+      responses:
+        '200':
+          description: Approval requests in log order
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [approvals]
+                properties:
+                  approvals: { type: array, items: { $ref: '#/components/schemas/ApprovalRequest' } }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/Problem' }
+
+  /v1/approvals/{request_id}/reject:
+    post:
+      tags: [authority]
+      operationId: rejectApproval
+      summary: Reject a pending approval request
+      description: Records `approval.declined` (decision `rejected`). The waiting action stays denied and the thread keeps its state; no thread transition is added. Rejecting a request that is no longer pending is a stored `invalid_transition`.
+      parameters:
+        - { name: request_id, in: path, required: true, schema: { $ref: '#/components/schemas/Ulid' } }
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeclineApproval' }
+      responses:
+        '201': { $ref: '#/components/responses/Accepted201' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '500': { $ref: '#/components/responses/Problem' }
+
+  /v1/approvals/{request_id}/request-changes:
+    post:
+      tags: [authority]
+      operationId: requestApprovalChanges
+      summary: Ask for changes on a pending approval request
+      description: Records `approval.declined` (decision `changes_requested`) and raises the material-risk fact of the thread, the existing T10 path. A running thread moves to `awaiting_decision` (T10); the `decide` command of the operator (T11) returns it to the queue. A thread in another state only gets the record.
+      parameters:
+        - { name: request_id, in: path, required: true, schema: { $ref: '#/components/schemas/Ulid' } }
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeclineApproval' }
+      responses:
+        '201': { $ref: '#/components/responses/Accepted201' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '500': { $ref: '#/components/responses/Problem' }
+
+  /v1/outputs/{ref}/search:
+    get:
+      tags: [threads]
+      operationId: searchOutput
+      summary: Search a retained output and return capped excerpts
+      description: Searches the retained full output `ref` (for example a diff `ref`) with a Go RE2 pattern and returns matching lines only, each clipped; never the whole output. `thread` names the searching thread; it may search references retained by itself or its children, any other reference is 404.
+      parameters:
+        - { name: ref, in: path, required: true, schema: { type: string, pattern: '^out_[0-9a-f]{32}$' } }
+        - { name: thread, in: query, required: true, schema: { $ref: '#/components/schemas/Ulid' } }
+        - { name: pattern, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 1024 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        '200':
+          description: Matching lines
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ref, matches, truncated]
+                properties:
+                  ref: { type: string }
+                  truncated: { type: boolean, description: True when the match limit was reached }
+                  matches:
+                    type: array
+                    items:
+                      type: object
+                      required: [line, text]
+                      properties:
+                        line: { type: integer, minimum: 1 }
+                        text: { type: string }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '500': { $ref: '#/components/responses/Problem' }
+
+  /v1/findings:
+    get:
+      tags: [threads]
+      operationId: listFindings
+      summary: List findings grouped by fingerprint
+      description: Scanner findings group by their fingerprint. Review findings (audit, security_review) have none and group by (tool, rule, location) with their evidence references kept as provenance. `status` is the latest recorded triage status of the group, `open` when none. Fix attempts are not persisted as events, so no fix status is derived from them.
+      parameters:
+        - { name: thread, in: query, schema: { $ref: '#/components/schemas/Ulid' } }
+        - { name: severity, in: query, schema: { type: string, enum: [unknown, info, low, medium, high, critical] } }
+        - { name: status, in: query, schema: { type: string, enum: [open, confirmed, fixed, false_positive, accepted_risk] } }
+      responses:
+        '200':
+          description: Finding groups in first-seen order
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [findings]
+                properties:
+                  findings: { type: array, items: { $ref: '#/components/schemas/FindingGroup' } }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
         '500': { $ref: '#/components/responses/Problem' }
 
   /v1/threads/{thread_id}/commands:
@@ -463,6 +607,26 @@ components:
           description: direct is displayed as "Host access"
         audit_status: { type: string, enum: [off, pending, running, pass, corrections_requested, error] }
         waiting_for: { type: string, description: Read-only reason a queued thread is waiting on the operator. }
+        checks:
+          type: object
+          description: Check results of the evaluated revision grouped by status; required checks with no result are listed under not_run. Present once a check or requirement exists.
+          required: [passed, failed, error, partial, not_run]
+          properties:
+            passed: { type: array, items: { type: string } }
+            failed: { type: array, items: { type: string } }
+            error: { type: array, items: { type: string } }
+            partial: { type: array, items: { type: string } }
+            not_run: { type: array, items: { type: string } }
+        open_requirements:
+          type: array
+          description: Outstanding items, read-only. Required checks not passed and open decisions.
+          items:
+            type: object
+            required: [kind, id]
+            properties:
+              kind: { type: string, enum: [check, decision] }
+              id: { type: string }
+              status: { type: string }
         last_seq: { type: integer, minimum: 0 }
 
     CreateThread:
@@ -539,6 +703,67 @@ components:
             resolution: { type: string, enum: [succeeded, failed, not_executed] }
             note: { type: string, minLength: 1 }
 
+    Diff:
+      type: object
+      required: [base, revision, patch, truncated, bytes, digest, ref]
+      properties:
+        base: { $ref: '#/components/schemas/GitRevision' }
+        revision: { $ref: '#/components/schemas/GitRevision' }
+        patch: { type: string, description: Capped unified diff }
+        truncated: { type: boolean }
+        bytes: { type: integer, minimum: 0, description: Size of the retained full diff }
+        digest: { type: string }
+        ref: { type: string, pattern: '^out_[0-9a-f]{32}$', description: Reference of the retained full diff }
+
+    ApprovalRequest:
+      type: object
+      required: [request_id, thread_id, state, action, requested_at]
+      properties:
+        request_id: { $ref: '#/components/schemas/Ulid' }
+        thread_id: { $ref: '#/components/schemas/Ulid' }
+        state: { type: string, enum: [pending, decided] }
+        action: { type: string }
+        target: { type: string }
+        plan_digest: { type: string }
+        rule_id: { type: string }
+        requested_at: { type: string, format: date-time }
+        decision:
+          type: object
+          required: [outcome, actor, at]
+          properties:
+            outcome: { type: string, enum: [approved, rejected, changes_requested] }
+            actor: { type: string }
+            at: { type: string, format: date-time }
+            reason: { type: string }
+            approval_id: { type: string }
+
+    DeclineApproval:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1 }
+
+    FindingGroup:
+      type: object
+      required: [key, source, tool, severity, status, threads, finding_ids, provenance, occurrences, first_seen, last_seen]
+      properties:
+        key: { type: string }
+        fingerprint: { type: string }
+        source: { type: string, enum: [scanner, audit, security_review] }
+        tool: { type: string }
+        rule: { type: string }
+        location: { type: string }
+        summary: { type: string }
+        severity: { type: string }
+        status: { type: string, enum: [open, confirmed, fixed, false_positive, accepted_risk] }
+        threads: { type: array, items: { $ref: '#/components/schemas/Ulid' } }
+        finding_ids: { type: array, items: { type: string } }
+        provenance: { type: array, items: { type: object } }
+        occurrences: { type: integer, minimum: 1 }
+        first_seen: { type: string, format: date-time }
+        last_seen: { type: string, format: date-time }
+
     CreateApproval:
       type: object
       additionalProperties: false
@@ -553,7 +778,7 @@ components:
         target: { type: string, minLength: 1 }
         actions: { type: array, minItems: 1, uniqueItems: true, items: { $ref: '#/components/schemas/Action' } }
         expires_at: { type: string, format: date-time }
-        rollback: { type: string, minLength: 1 }
+        rollback: { type: string, minLength: 1, description: "A rollback command, or a checkpoint reference vmsnap:<driver>/<endpoint>/<vm>/<snapshot> (parts URL-escaped). A checkpoint reference is admitted only if the owning VM driver verifies the snapshot; otherwise the request is rejected with a stored 403 policy_denied whose detail starts with checkpoint_unverified." }
         irreversible_effects: { type: array, items: { type: string, minLength: 1 } }
       if:
         required: [actions]

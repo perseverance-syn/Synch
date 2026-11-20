@@ -31,8 +31,8 @@ func scanRoutes(t *testing.T) []scannedRoute {
 			routes = append(routes, scannedRoute{method: method, path: path})
 		}
 	}
-	if len(routes) != 13 {
-		t.Fatalf("route scan found %d routes, want the contract's 13", len(routes))
+	if len(routes) != 19 {
+		t.Fatalf("route scan found %d routes, want the contract's 19", len(routes))
 	}
 	return routes
 }
@@ -64,8 +64,8 @@ func TestCommandsReachEveryRoute(t *testing.T) {
 	}
 	covered := map[scannedRoute]bool{}
 	for _, route := range routes {
-		// Driver listing is API-only; evidence export has dedicated integration tests.
-		if route.path == "/v1/execution-drivers" || route.path == "/v1/threads/{thread_id}/evidence" {
+		// These routes are API-only for now (card 114b adds no CLI commands); evidence export has dedicated integration tests.
+		if apiOnly[route.path] {
 			continue
 		}
 		if _, ok := commands[route]; !ok {
@@ -121,4 +121,10 @@ func routeEvidence(route scannedRoute) []string {
 	default:
 		return nil
 	}
+}
+
+// apiOnly lists contract paths with no CLI command yet; each has endpoint tests in internal/api.
+var apiOnly = map[string]bool{
+	"/v1/execution-drivers": true, "/v1/threads/{thread_id}/evidence": true, "/v1/threads/{thread_id}/diff": true,
+	"/v1/approvals": true, "/v1/approvals/{request_id}/reject": true, "/v1/approvals/{request_id}/request-changes": true, "/v1/findings": true, "/v1/outputs/{ref}/search": true,
 }

@@ -1,6 +1,6 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
- "$id": "https://synch.local/contracts/events/runner-event/2.0.2",
+ "$id": "https://synch.local/contracts/events/runner-event/2.0.3",
  "title": "Synch runner-local journal event v2.0.2",
  "description": "Spec 'Remote execution' (a remote runner owns the process and stores numbered events), decision 15. Written by a runner to its local journal before it acknowledges anything. Has no global_seq/recorded_at: only the daemon assigns those on ingest (catalogue.md section 3). Payload must satisfy the catalogue payload schema for (type, type_version). The runner validates (type, type_version, payload) against these catalogue payload schemas BEFORE acknowledging a record, so every acknowledged record is ingestible.",
  "type": "object",
@@ -83,7 +83,7 @@
       "const": 1
      },
      "payload": {
-      "$ref": "https://synch.local/contracts/events/catalogue/4.1.0#/$defs/e_engine_output/properties/payload"
+      "$ref": "https://synch.local/contracts/events/catalogue/4.2.0#/$defs/e_engine_output/properties/payload"
      }
     }
    }
@@ -105,7 +105,7 @@
       "const": 1
      },
      "payload": {
-      "$ref": "https://synch.local/contracts/events/catalogue/4.1.0#/$defs/e_engine_usage/properties/payload"
+      "$ref": "https://synch.local/contracts/events/catalogue/4.2.0#/$defs/e_engine_usage/properties/payload"
      }
     }
    }
@@ -127,7 +127,7 @@
       "const": 1
      },
      "payload": {
-      "$ref": "https://synch.local/contracts/events/catalogue/4.1.0#/$defs/e_engine_capability_unavailable/properties/payload"
+      "$ref": "https://synch.local/contracts/events/catalogue/4.2.0#/$defs/e_engine_capability_unavailable/properties/payload"
      }
     }
    }
@@ -149,7 +149,7 @@
       "const": 1
      },
      "payload": {
-      "$ref": "https://synch.local/contracts/events/catalogue/4.1.0#/$defs/e_process_exited/properties/payload"
+      "$ref": "https://synch.local/contracts/events/catalogue/4.2.0#/$defs/e_process_exited/properties/payload"
      }
     }
    }
@@ -171,7 +171,7 @@
       "const": 1
      },
      "payload": {
-      "$ref": "https://synch.local/contracts/events/catalogue/4.1.0#/$defs/e_check_result/properties/payload"
+      "$ref": "https://synch.local/contracts/events/catalogue/4.2.0#/$defs/e_check_result/properties/payload"
      }
     }
    }
@@ -193,7 +193,7 @@
       "const": 2
      },
      "payload": {
-      "$ref": "https://synch.local/contracts/events/catalogue/4.1.0#/$defs/e_policy_decided/properties/payload"
+      "$ref": "https://synch.local/contracts/events/catalogue/4.2.0#/$defs/e_policy_decided/properties/payload"
      }
     }
    }

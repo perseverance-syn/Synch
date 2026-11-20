@@ -61,7 +61,7 @@ func TestOpenAPIRoutes(t *testing.T) {
 	if len(contract) == 0 || len(contract) != len(routes) {
 		t.Fatalf("contract %v vs routes %v", contract, routes)
 	}
-	fill := strings.NewReplacer("{thread_id}", "01JD3Q8Z7Y6X5W4V3T2S1R0QPN", "{grant_id}", "grant", "{request_id}", "request", "{stream}", "system")
+	fill := strings.NewReplacer("{thread_id}", "01JD3Q8Z7Y6X5W4V3T2S1R0QPN", "{grant_id}", "grant", "{request_id}", "request", "{ref}", "out_00000000000000000000000000000000", "{stream}", "system")
 	for _, entry := range routes {
 		key := entry.method + " " + entry.path
 		if !contract[key] {
@@ -76,7 +76,9 @@ func TestOpenAPIRoutes(t *testing.T) {
 		switch entry.operation {
 		case "streamEvents":
 			expected = http.StatusConflict
-		case "getThread", "getReceipt", "getEvidence":
+		case "searchOutput":
+			expected = http.StatusBadRequest
+		case "getThread", "getReceipt", "getEvidence", "getDiff":
 			expected = http.StatusNotFound
 		}
 		if entry.method == http.MethodPost {

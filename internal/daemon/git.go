@@ -32,6 +32,7 @@ func (d *Daemon) CreateWorktree(ctx context.Context, project gitops.Project, id,
 	if err == nil {
 		d.mu.Lock()
 		d.worktrees[id] = worktree.Path()
+		d.worktreeProject[id] = project
 		d.mu.Unlock()
 	}
 	return worktree, err

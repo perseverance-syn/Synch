@@ -20,7 +20,7 @@ import (
 
 const (
 	DefaultPort = "7420"
-	apiVersion  = "3.1.0"
+	apiVersion  = "3.2.1"
 
 	// DefaultMaxBodyBytes bounds mutating HTTP request bodies to 1 MiB.
 	DefaultMaxBodyBytes = 1 << 20
@@ -29,6 +29,11 @@ const (
 // Config supplies the daemon's shared store, thread machine, and deferred policy integrations.
 type Config struct {
 	ExecutionDrivers func() []ExecutionDriver
+	// Diff reads a thread worktree diff against its base; VerifyCheckpoint verifies a checkpoint
+	// rollback on its owning VM driver. Either may be nil.
+	Diff             DiffFunc
+	SearchOutput     SearchOutputFunc
+	VerifyCheckpoint VerifyCheckpointFunc
 	EvidenceRedactor *credentials.Redactor
 	Store            *eventlog.Store
 	Threads          *thread.Machine
@@ -134,6 +139,12 @@ var routes = []route{
 	{"POST", "/v1/threads", "createThread"},
 	{"GET", "/v1/threads/{thread_id}", "getThread"},
 	{"GET", "/v1/threads/{thread_id}/evidence", "getEvidence"},
+	{"GET", "/v1/threads/{thread_id}/diff", "getDiff"},
+	{"GET", "/v1/approvals", "listApprovals"},
+	{"POST", "/v1/approvals/{request_id}/reject", "rejectApproval"},
+	{"POST", "/v1/approvals/{request_id}/request-changes", "requestApprovalChanges"},
+	{"GET", "/v1/findings", "listFindings"},
+	{"GET", "/v1/outputs/{ref}/search", "searchOutput"},
 	{"POST", "/v1/threads/{thread_id}/commands", "sendThreadCommand"},
 	{"POST", "/v1/threads/{thread_id}/approvals", "createApproval"},
 	{"POST", "/v1/threads/{thread_id}/grants", "createGrant"},
@@ -242,6 +253,14 @@ func (s *Server) serveRoute(w http.ResponseWriter, r *http.Request, caller strin
 		s.getThread(w, r, params["thread_id"])
 	case "getEvidence":
 		s.getEvidence(w, r, params["thread_id"])
+	case "getDiff":
+		s.getDiff(w, r, params["thread_id"])
+	case "listApprovals":
+		s.listApprovals(w, r)
+	case "listFindings":
+		s.listFindings(w, r)
+	case "searchOutput":
+		s.searchOutput(w, r, params["ref"])
 	case "getReceipt":
 		s.getReceipt(w, r, caller, params["request_id"])
 	case "streamEvents", "pageEvents":

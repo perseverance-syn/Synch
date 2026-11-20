@@ -22,8 +22,8 @@ func loadCatalogue(t *testing.T) schemaDoc {
 	must(t, err)
 	var doc schemaDoc
 	must(t, json.Unmarshal(raw, &doc))
-	if !strings.HasSuffix(doc["$id"].(string), "/4.1.0") {
-		t.Fatalf("catalogue id = %v, want 4.1.0", doc["$id"])
+	if !strings.HasSuffix(doc["$id"].(string), "/4.2.0") {
+		t.Fatalf("catalogue id = %v, want 4.2.0", doc["$id"])
 	}
 	return doc
 }
@@ -136,11 +136,11 @@ func assertPayload(t *testing.T, d schemaDoc, def, eventType string, payload []b
 	var v any
 	must(t, json.Unmarshal(payload, &v))
 	if errs := d.check(eventType, d.payloadSchema(t, def, eventType), v); len(errs) > 0 {
-		t.Fatalf("%s payload %s drifts from catalogue 4.1.0: %v", eventType, payload, errs)
+		t.Fatalf("%s payload %s drifts from catalogue 4.2.0: %v", eventType, payload, errs)
 	}
 }
 
-// TestRecordsMatchCatalogue proves C4/L2-L6 the three records marshal into payloads that satisfy catalogue 4.1.0, including empty optional lists.
+// TestRecordsMatchCatalogue proves C4/L2-L6 the three records marshal into payloads that satisfy catalogue 4.2.0, including empty optional lists.
 func TestRecordsMatchCatalogue(t *testing.T) {
 	d := loadCatalogue(t)
 	a := assignment(eventlog.NewID())

@@ -1,6 +1,6 @@
-# Event log contract — v4.1.0
+# Event log contract — v4.2.0
 
-Files: [`envelope.schema.json`](envelope.schema.json) (envelope 2.0.0, daemon-persisted form), [`runner-event.schema.json`](runner-event.schema.json) (runner journal 2.0.2), [`catalogue.schema.json`](catalogue.schema.json) (catalogue 4.1.0). In 4.1.0 (minor, additive, card 000-C1, D-27): new types `child.assignment_recorded`, `child.result_recorded`, `audit.setting_recorded`, all type_version 1. In 4.0.0: `external_request.resolved` 4 (evidence field sets, `provider_task_absent`) and `thread.state_changed` 4 (T38). Type versions changed in 3.0.0: `thread.state_changed` 3, `approval.recorded` 3, `grant.issued` 3, `grant.revoked` 2, `policy.decided` 2, `external_request.persisted` 3, `external_request.resolved` 3.
+Files: [`envelope.schema.json`](envelope.schema.json) (envelope 2.0.0, daemon-persisted form), [`runner-event.schema.json`](runner-event.schema.json) (runner journal 2.0.3), [`catalogue.schema.json`](catalogue.schema.json) (catalogue 4.2.0). In 4.2.0 (minor, additive, card 114b): new type `approval.declined` (type_version 1). In 4.1.0 (minor, additive, card 000-C1, D-27): new types `child.assignment_recorded`, `child.result_recorded`, `audit.setting_recorded`, all type_version 1. In 4.0.0: `external_request.resolved` 4 (evidence field sets, `provider_task_absent`) and `thread.state_changed` 4 (T38). Type versions changed in 3.0.0: `thread.state_changed` 3, `approval.recorded` 3, `grant.issued` 3, `grant.revoked` 2, `policy.decided` 2, `external_request.persisted` 3, `external_request.resolved` 3.
 Examples: [`../examples/events/`](../examples/events/). Fixtures: `../tests/cases.json`.
 
 ## 1. Log rules
@@ -37,6 +37,7 @@ Source: spec "Persistent state", "Core architecture" (append-only event log), "R
 | `finding.recorded` (2) | thread | scanner finding (drivers/finding.schema.json) or audit/review finding (`review_finding`) | Findings and fixes |
 | `approval.recorded` (3) | thread | **human approval**; payload = policy `$defs/approval` | dec. 20 |
 | `approval.voided` (1) | thread | approval no longer valid | dec. 20 |
+| `approval.declined` (1) | thread | an operator refused a pending approval request (a `policy.decided` event with `outcome: waiting_approval`): `request_id` (that event's id), `decision` (`rejected` or `changes_requested`), non-empty `reason`, `operator` | dec. 20 (approval requests), card 114b |
 | `acceptance.recorded` (1) | thread | **human acceptance** of exact revision | dec. 21 |
 | `grant.issued` (3) / `grant.revoked` (2) | thread | Full Control grant lifecycle; revocation names its operator (`revoked_by`) or `cause: thread_ended` | dec. 14 |
 | `policy.decided` (2) | thread | mediated action decision with actor, machine, outcome, qualified `rule_id` | Policy and credentials |

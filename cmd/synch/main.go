@@ -13,11 +13,24 @@ import (
 	"synch/internal/api"
 	"synch/internal/cli"
 	"synch/internal/daemon"
+	"synch/internal/mcp"
 )
 
 // run routes the runtime entry points to dispatch and every other command to the
 // operator CLI, which talks to the daemon over the local API.
 func run(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "mcp" {
+		if len(args) != 1 {
+			_, _ = fmt.Fprintln(stderr, "usage: synch mcp")
+			return 2
+		}
+		err := mcp.Serve(os.Stdin, stdout, mcp.Config{Server: os.Getenv("SYNCH_SERVER"), Token: os.Getenv("SYNCH_TOKEN"), ThreadID: os.Getenv("SYNCH_THREAD_ID")})
+		if err != nil {
+			_, _ = fmt.Fprintln(stderr, err)
+			return 1
+		}
+		return 0
+	}
 	if len(args) > 0 {
 		switch args[0] {
 		case "daemon", "runner", "agent":

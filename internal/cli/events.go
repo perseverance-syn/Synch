@@ -328,7 +328,7 @@ func (f *follower) resync(ctx context.Context) error {
 // v4.1.0 (TestCatalogueEventTypesMatchContract keeps the list in step). The streamEvents contract requires clients to ignore events of
 // unknown type while still advancing their cursor past them.
 var catalogueEventTypes = map[string]bool{
-	"acceptance.recorded": true, "approval.recorded": true, "approval.voided": true,
+	"acceptance.recorded": true, "approval.recorded": true, "approval.voided": true, "approval.declined": true,
 	"assignment.delivered": true, "assignment.dispatched": true, "audit.status": true,
 	"brief.version_accepted": true, "check.result": true, "engine.capability_unavailable": true,
 	"engine.output": true, "engine.usage": true, "external_request.persisted": true,

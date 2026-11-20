@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
- "$id": "https://synch.local/contracts/events/catalogue/4.1.0",
- "title": "Synch event catalogue v4.1.0",
+ "$id": "https://synch.local/contracts/events/catalogue/4.2.0",
+ "title": "Synch event catalogue v4.2.0",
  "description": "An event = envelope + type-specific payload. Producer schema: rejects unknown types and fields. Readers follow README.md 'Compatibility'. Meanings and spec citations: catalogue.md.",
  "allOf": [
   {
@@ -65,6 +65,9 @@
     },
     {
      "$ref": "#/$defs/e_approval_voided"
+    },
+    {
+     "$ref": "#/$defs/e_approval_declined"
     },
     {
      "$ref": "#/$defs/e_acceptance_recorded"
@@ -1775,6 +1778,50 @@
         "thread_ended",
         "used"
        ]
+      }
+     }
+    }
+   }
+  },
+  "e_approval_declined": {
+   "allOf": [
+    {
+     "$ref": "#/$defs/on_thread"
+    }
+   ],
+   "properties": {
+    "type": {
+     "const": "approval.declined"
+    },
+    "type_version": {
+     "const": 1
+    },
+    "payload": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "request_id",
+      "decision",
+      "reason",
+      "operator"
+     ],
+     "properties": {
+      "request_id": {
+       "$ref": "#/$defs/ulid"
+      },
+      "decision": {
+       "enum": [
+        "rejected",
+        "changes_requested"
+       ]
+      },
+      "reason": {
+       "type": "string",
+       "minLength": 1
+      },
+      "operator": {
+       "type": "string",
+       "minLength": 1
       }
      }
     }

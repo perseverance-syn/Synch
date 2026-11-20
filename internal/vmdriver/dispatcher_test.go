@@ -258,11 +258,20 @@ func checkOperations(t *testing.T, f *fixture, j *testJournal) {
 
 	f.invalidSnapshot.Store(true)
 	before := f.mutations.Load()
+	if err := vm.VerifySnapshot(ctx, f.driver, "lab", f.target, "checkpoint"); !errors.Is(err, vm.ErrSnapshot) {
+		t.Fatalf("inconsistent snapshot verified: %v", err)
+	}
 	restore := vm.ExternalRequest{Endpoint: "lab", Operation: vm.RestoreOp, Resource: f.target}
 	if _, err := f.driver.Restore(ctx, restore, f.target, "checkpoint"); !errors.Is(err, vm.ErrSnapshot) || f.mutations.Load() != before {
 		t.Fatalf("inconsistent snapshot reached restore: %v", err)
 	}
 	f.invalidSnapshot.Store(false)
+	if err := vm.VerifySnapshot(ctx, f.driver, "lab", f.target, "checkpoint"); err != nil || f.mutations.Load() != before {
+		t.Fatalf("intact snapshot: %v", err)
+	}
+	if err := vm.VerifySnapshot(ctx, f.driver, "lab", f.target, "missing"); !errors.Is(err, vm.ErrSnapshot) {
+		t.Fatalf("missing snapshot verified: %v", err)
+	}
 	restore.ID = "01HF7YAT000000000000000003"
 	restore.Driver = row.Driver
 	restore.ParamsDigest = req.ParamsDigest

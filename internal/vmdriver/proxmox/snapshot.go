@@ -109,3 +109,24 @@ func (d *Driver) findVMToken(ctx context.Context, endpoint, token, thread string
 	}
 	return results
 }
+
+// VerifySnapshot confirms a listed snapshot's metadata against its stored configuration without restoring it.
+func (d *Driver) VerifySnapshot(ctx context.Context, endpoint, vm, name string) error {
+	if !snapshotName.MatchString(name) || name == "current" {
+		return vmdriver.ErrSnapshot
+	}
+	path, err := d.path(ctx, endpoint, vm)
+	if err != nil {
+		return errors.Join(vmdriver.ErrSnapshot, err)
+	}
+	list, err := d.snapshots(ctx, endpoint, path)
+	if err != nil {
+		return errors.Join(vmdriver.ErrSnapshot, err)
+	}
+	for _, item := range list {
+		if item.Name == name && d.verify(ctx, endpoint, path, item) {
+			return nil
+		}
+	}
+	return vmdriver.ErrSnapshot
+}
