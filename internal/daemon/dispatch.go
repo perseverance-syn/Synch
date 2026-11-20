@@ -31,6 +31,11 @@ type ProjectConfig struct {
 	// project (same formats as Config.ChildMaxRuntime and ChildLoopRepeats).
 	MaxRuntime  Setting `json:"max_runtime,omitempty"`
 	LoopRepeats Setting `json:"loop_repeats,omitempty"`
+	// GuidanceFile is optional project guidance (conventions, interfaces, test commands)
+	// loaded into every session. TargetGuidance maps an execution target (host) name to
+	// its own guidance file. Relative paths live inside Dir.
+	GuidanceFile   string            `json:"guidance_file,omitempty"`
+	TargetGuidance map[string]string `json:"target_guidance,omitempty"`
 }
 
 // --- Dispatch loop: promote, route, and start every dispatchable thread ---

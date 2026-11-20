@@ -49,6 +49,15 @@
 //     the same way. The child records process.exited work=lost, a stderr line naming the
 //     reason, and takes T15 with a failure checkpoint carrying that reason, for the
 //     coordinator or operator to steer (decision 07).
+//   - Context controls and handoff (internal/context, card 303): every Builder child session
+//     starts with its role pack (Config.RoleSkillsDir), the project's guidance file and the
+//     target's guidance file, stable-first, each with source and digest; the coordinator gets
+//     none. Rollover (Rollover, SwitchHarness) and a failure checkpoint write a handoff file
+//     into the worktree's git metadata directory (never the project's history; the data
+//     directory when the thread has no git checkout), and the checkpoint lists it. The next
+//     session, on any harness, starts with that handoff as stable instructions. CapOutput
+//     and SearchOutput cap tool output (Config.OutputCap, default 16 KiB), retain it in full
+//     under the data directory and search it by reference.
 //   - Cancelling a parent cancels its children first (T30), each confirmed only once its
 //     engine session has stopped.
 //   - Codex, Claude Code and Kimi adapters are built from configured binaries (an

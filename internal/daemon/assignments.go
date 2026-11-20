@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -103,17 +102,21 @@ func (d *Daemon) StartAssignment(ctx context.Context, req engine.StartRequest) e
 			d.releaseAssignment(req.ThreadID, active)
 		}
 	}()
+	// Guidance is read before the dispatch commits so a bad file leaves the thread queued.
+	guidance, err := d.guidanceFor(project)
+	if err != nil {
+		return fmt.Errorf("load session guidance: %w", err)
+	}
 	remoteBound := d.remote != nil && state.Facts.RunnerID == d.remoteID
 	return d.children.Dispatch(ctx, req.ThreadID, req.AssignmentID, eventlog.NewID(), func(_ context.Context, cp *thread.Checkpoint) error {
+		// Every session start, fresh or continued, gets guidance then the handoff, stable-first.
+		instructions, err := sessionInstructions(guidance, req, cp)
+		if err != nil {
+			return err
+		}
+		req.Instructions = instructions
 		if remoteBound {
 			return d.startRemote(ctx, req)
-		}
-		if cp != nil {
-			data, err := json.Marshal(cp)
-			if err != nil {
-				return err
-			}
-			req.Instructions = append(req.Instructions, engine.Instruction{Text: "Continue from the verified checkpoint:\n" + string(data)})
 		}
 		revision := headRevision(ctx, req.Workdir)
 		if revision == "" {
@@ -322,12 +325,29 @@ func (d *Daemon) harnessFailed(ctx context.Context, req engine.StartRequest, act
 	}
 	cp := thread.Checkpoint{ThreadID: req.ThreadID, Revision: revision, FailedAttempts: []thread.FailedAttempt{{
 		Assignment: req.AssignmentID, Harness: active.harness, Model: active.model, Reason: reason}}}
+	// The failure itself must be recorded even when the handoff file cannot be written.
+	if err := d.writeHandoff(ctx, &cp, req.Workdir, state); err != nil {
+		slog.Warn("write failure handoff", "thread_id", req.ThreadID, "error", err)
+	}
 	return d.threads.HarnessFailure(ctx, dir, cp)
 }
 
 // Rollover commits the checkpoint, settles the old session, and dispatches
 // a fresh session using the verified handoff.
 func (d *Daemon) Rollover(ctx context.Context, cp thread.Checkpoint, req engine.StartRequest) error {
+	return d.rollover(ctx, cp, req, "operator")
+}
+
+// SwitchHarness is a rollover for a harness switch: the operator changed the thread's
+// pin, and the new session routes to the pinned pair and continues from the same
+// handoff files. Live process migration and native chat transfer are not offered.
+func (d *Daemon) SwitchHarness(ctx context.Context, cp thread.Checkpoint, req engine.StartRequest) error {
+	return d.rollover(ctx, cp, req, "harness_switch")
+}
+
+// rollover writes the handoff file at the safe checkpoint, takes T13, publishes the
+// checkpoint (rollover.checkpointed, T14) and dispatches the next session.
+func (d *Daemon) rollover(ctx context.Context, cp thread.Checkpoint, req engine.StartRequest, trigger string) error {
 	if cp.ThreadID != req.ThreadID {
 		return errors.New("rollover request belongs to a different thread")
 	}
@@ -335,7 +355,14 @@ func (d *Daemon) Rollover(ctx context.Context, cp thread.Checkpoint, req engine.
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
-	if _, err := d.threads.Rollover(ctx, dir, cp, "operator"); err != nil {
+	state, err := d.threads.Status(ctx, cp.ThreadID)
+	if err != nil {
+		return err
+	}
+	if err := d.writeHandoff(ctx, &cp, req.Workdir, state); err != nil {
+		return fmt.Errorf("write handoff: %w", err)
+	}
+	if _, err := d.threads.Rollover(ctx, dir, cp, trigger); err != nil {
 		return err
 	}
 	d.mu.Lock()

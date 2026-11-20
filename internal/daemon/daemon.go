@@ -14,6 +14,7 @@ import (
 
 	"synch/internal/api"
 	"synch/internal/children"
+	sctx "synch/internal/context"
 	"synch/internal/engine"
 	"synch/internal/engine/claudecode"
 	"synch/internal/eventlog"
@@ -57,6 +58,12 @@ type Config struct {
 	// max_runtime wins. ChildLoopRepeats is the same for how many consecutive identical
 	// tool calls with no other output count as a loop (default 5, at least 2).
 	ChildMaxRuntime, ChildLoopRepeats Setting
+	// RoleSkillsDir is the role-skills pack (role-skills.json and its skills/) whose Builder
+	// guidance starts every child session. Empty loads no role guidance.
+	RoleSkillsDir string
+	// OutputCap is the largest tool or check output excerpt handed to an agent, in bytes
+	// (default 16 KiB). The full output stays on disk under the data directory.
+	OutputCap int
 	// ChildLimits overrides the Q-27 child limits (depth 3, concurrency 4, attempts 3); zero keeps each default.
 	ChildLimits children.Limits
 
@@ -98,6 +105,8 @@ type Daemon struct {
 	git          *gitops.Service
 	rules        []*policy.File
 	dataDir      string
+	roleSkills   string
+	outputs      *sctx.Store
 	host         string
 	port         string
 	tokens       api.TokenVerifier
@@ -205,6 +214,10 @@ func (d *Daemon) configure(ctx context.Context, cfg Config) error {
 	d.driver, err = execdriver.NewDirect(d.supervisor, grantProof{})
 	if err != nil {
 		return fmt.Errorf("open Direct driver: %w", err)
+	}
+	d.roleSkills = cfg.RoleSkillsDir
+	if d.outputs, err = sctx.NewStore(filepath.Join(d.dataDir, "outputs"), cfg.OutputCap); err != nil {
+		return fmt.Errorf("open output store: %w", err)
 	}
 	d.git = gitops.NewWithEvidence(d.decideGit, nil)
 	d.defaults = routing.Pair{Harness: cfg.DefaultHarness, Model: cfg.DefaultModel}
