@@ -25,11 +25,13 @@ const builderRole = "builder"
 
 // --- Session guidance: role, project and target blocks for every session start (card 303 X1, X4) ---
 
-// guidanceFor loads the Builder role pack and the project's and target's optional
-// guidance files. With no role pack and no files configured it loads nothing.
-func (d *Daemon) guidanceFor(project string) ([]sctx.Block, error) {
+// guidanceFor loads the role's instructions (internal/roles) and the project's and
+// target's optional guidance files (internal/context). The role's skills are not repeated
+// here: they reach the engine pinned, through StartRequest.Skills. With no role pack and no
+// files configured it loads nothing.
+func (d *Daemon) guidanceFor(project, role string) ([]sctx.Block, error) {
 	pc := d.projects[project]
-	in := sctx.Inputs{PackDir: d.roleSkills, Role: builderRole}
+	in := sctx.Inputs{}
 	var err error
 	if in.ProjectFile, err = guidancePath(pc.Dir, pc.GuidanceFile); err != nil {
 		return nil, err
@@ -37,7 +39,15 @@ func (d *Daemon) guidanceFor(project string) ([]sctx.Block, error) {
 	if in.TargetFile, err = guidancePath(pc.Dir, pc.TargetGuidance[d.driver.Describe().Host]); err != nil {
 		return nil, err
 	}
-	return sctx.Guidance(in)
+	files, err := sctx.Guidance(in)
+	if err != nil {
+		return nil, err
+	}
+	head, err := d.roleBlock(role)
+	if err != nil {
+		return nil, err
+	}
+	return append(head, files...), nil
 }
 
 // guidancePath resolves a configured guidance file: absolute paths stand, relative

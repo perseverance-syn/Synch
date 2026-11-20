@@ -1,4 +1,4 @@
-# CI provider driver contract — v0.1.0 (proposed: pending owner acceptance with card 503)
+# CI provider driver contract — v0.2.0 (accepted v0.1.0 (D-46); v0.2.0 adds Jenkins, pending owner acceptance with card 504)
 
 Sources: spec "Gate runner and CI" ("Run them locally and integrate the same definition with GitHub Actions, GitLab CI and Jenkins. Surface errors and partial imports. A malformed or unsupported report cannot produce a pass."), decision 19·B ("Preserve equivalent check definitions, thresholds and outcome reporting across claimed integrations."), decision 18 (uncertain operations), "Policy and credentials" ("Broker secrets at use and redact known values from supported inputs, outputs, storage and exports"). Providers covered here: GitHub Actions and GitLab CI. Jenkins is card 504 and must implement the same interface.
 
@@ -84,3 +84,55 @@ One row per (provider, platform, version), with results from a real service:
 V1 tests have no network: every real-provider row is `not_run` with reason `deferred by owner`. Mock tests prove the driver logic, not the service. The GitLab row is identical with `driver: "gitlab-ci"`, `platform: "GitLab CI"`, `platform_version: "REST v4"`.
 
 Public sources the mocks follow: GitHub REST "Create a workflow dispatch event", "List workflow runs for a repository", "List jobs for a workflow run", "Download job logs for a workflow run", "Cancel a workflow run"; GitLab REST "Create a new pipeline", "List project pipelines", "Get pipeline variables", "List pipeline jobs", "Get a log file (trace)", "Cancel a pipeline's jobs".
+
+## 9. Jenkins (additive in v0.2.0)
+
+### Pipeline and commit evidence
+
+Configure a parameterized Pipeline job with string parameters `SYNCH_REF`, `SYNCH_SHA` and `SYNCH_TOKEN`. The project is the slash-delimited Jenkins folder and job name. The job must verify that `SYNCH_REF` resolves to `SYNCH_SHA`, check out that exact SHA using the Git plugin, and run the same gate definition as §1. Configure one Pipeline stage per gate check and use the check ID as the stage name. Read the build's Git plugin checkout evidence from `actions[].lastBuiltRevision.SHA1`. Missing checkout evidence for a successful build and conflicting checkout SHAs are errors. Apply §5 to an observed SHA mismatch.
+
+### Dispatch, recovery and cancellation
+
+Use the §3 dispatcher with driver `jenkins`. Send the three parameters as a form body to `POST .../buildWithParameters`. A 201 response supplies the queue item in `Location`. Only a queue item URL under the configured controller is accepted. Poll the item to obtain its executable build number. After queue eviction, look up that queue ID among the job's 100 most recent builds.
+
+For a lost response, look for `SYNCH_TOKEN` in the job's queue items and its 100 most recent builds. A queue item and its executable represent one request. Exactly one matching run settles the request. Missing or ambiguous evidence stays unknown under §3. Use `POST .../stop` for an executable build and `POST /queue/cancelItem` for a pending item.
+
+### State and logs
+
+| Jenkins build or stage state | Check status | Interpretation |
+|---|---|---|
+| `SUCCESS` | `passed` | Stage succeeded on the verified commit |
+| `FAILURE`, `FAILED`, `UNSTABLE` | `failed` | Stage failed or is unstable |
+| `ABORTED` | `error` | Cancelled or interrupted, including Jenkins timeouts reported as aborted |
+| `TIMED_OUT`, `TIMEOUT` | `error` | Explicit timeout |
+| `NOT_BUILT`, `NOT_EXECUTED` | `not_run` | Skipped |
+| `QUEUED`, `IN_PROGRESS`, `PAUSED_PENDING_INPUT` | `not_run` | Queue wait or ongoing work |
+| Any other state | `error` | Unrecognised state |
+
+Use the Pipeline REST API plugin's `wfapi/describe` for stages and the stage node's `wfapi/log` for text. The `console` log ID explicitly requests build-wide `consoleText`. A stage response that reports additional text below the retention boundary produces an error. Use the provider's `FetchLog` to apply §7 with the session credentials included. A cancelled or timed-out build suppresses passed stages, even when some stages completed before the interruption.
+
+### Credentials
+
+Read the API token and username from the configured broker keys `endpoint` and `endpoint/user`, then send them in the Basic authorization header. API-token authentication is crumb-exempt on modern Jenkins. For controllers configured to require a crumb, fetch `/crumbIssuer/api/json` before a mutation and send the returned `crumb` in the `crumbRequestField` header with the issuer's session cookie. A failed or malformed issuer response prevents the mutation. The driver handles the standard `Jenkins-Crumb` and legacy `.crumb` fields. Accepted credentials, crumb values, and session cookies are redacted from log evidence and excluded from error diagnostics.
+
+### Capability matrix
+
+```json
+{
+  "matrix_version": 1,
+  "driver": "jenkins",
+  "driver_version": "0.2.0",
+  "platform": "Jenkins",
+  "platform_version": "Remote Access API and Pipeline REST API plugin",
+  "tested_at": null,
+  "ops": {
+    "trigger": "not_run: deferred by owner", "find_by_token": "not_run: deferred by owner",
+    "status": "not_run: deferred by owner", "jobs": "not_run: deferred by owner",
+    "logs": "not_run: deferred by owner", "cancel": "not_run: deferred by owner",
+    "lost_response_reconcile_trigger": "not_run: deferred by owner"
+  },
+  "evidence": "internal/ci/jenkins httptest mocks only"
+}
+```
+
+Public documentation for the mock shapes includes the [Jenkins Remote Access API](https://www.jenkins.io/doc/book/using/remote-access-api/), [Jenkins CSRF protection](https://www.jenkins.io/doc/book/security/csrf-protection/), [Pipeline REST API plugin](https://plugins.jenkins.io/pipeline-rest-api/), and the [Git plugin BuildData API](https://javadoc.jenkins.io/plugin/git/hudson/plugins/git/util/BuildData.html).

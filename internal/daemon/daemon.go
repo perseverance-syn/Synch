@@ -22,6 +22,7 @@ import (
 	"synch/internal/gitops"
 	"synch/internal/policy"
 	"synch/internal/remote"
+	"synch/internal/roles"
 	"synch/internal/routing"
 	"synch/internal/supervisor"
 	"synch/internal/thread"
@@ -58,8 +59,9 @@ type Config struct {
 	// max_runtime wins. ChildLoopRepeats is the same for how many consecutive identical
 	// tool calls with no other output count as a loop (default 5, at least 2).
 	ChildMaxRuntime, ChildLoopRepeats Setting
-	// RoleSkillsDir is the role-skills pack (role-skills.json and its skills/) whose Builder
-	// guidance starts every child session. Empty loads no role guidance.
+	// RoleSkillsDir is the trusted role-skills pack (role-skills.json and its skills/): the
+	// role instructions and pinned skills of every child session come from it (internal/roles).
+	// Empty loads no role guidance and no skills. A pack that fails to load stops the daemon.
 	RoleSkillsDir string
 	// OutputCap is the largest tool or check output excerpt handed to an agent, in bytes
 	// (default 16 KiB). The full output stays on disk under the data directory.
@@ -105,7 +107,7 @@ type Daemon struct {
 	git          *gitops.Service
 	rules        []*policy.File
 	dataDir      string
-	roleSkills   string
+	roles        *roles.Registry
 	outputs      *sctx.Store
 	host         string
 	port         string
@@ -215,7 +217,11 @@ func (d *Daemon) configure(ctx context.Context, cfg Config) error {
 	if err != nil {
 		return fmt.Errorf("open Direct driver: %w", err)
 	}
-	d.roleSkills = cfg.RoleSkillsDir
+	if cfg.RoleSkillsDir != "" {
+		if d.roles, err = roles.Load(cfg.RoleSkillsDir); err != nil {
+			return fmt.Errorf("load role pack: %w", err)
+		}
+	}
 	if d.outputs, err = sctx.NewStore(filepath.Join(d.dataDir, "outputs"), cfg.OutputCap); err != nil {
 		return fmt.Errorf("open output store: %w", err)
 	}

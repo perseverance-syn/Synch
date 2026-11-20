@@ -1,0 +1,22 @@
+{
+  "matrix_version": 1,
+  "driver": "hyperv",
+  "driver_version": "0.1.0",
+  "platform": "Microsoft Hyper-V",
+  "platform_version": "untested",
+  "ops": {
+    "inventory": "not run: deferred by owner",
+    "create_from_base": "not run: deferred by owner",
+    "start": "not run: deferred by owner",
+    "stop": "not run: deferred by owner",
+    "delete": "not run: deferred by owner",
+    "get_task": "not run: deferred by owner",
+    "snapshot": "not run: deferred by owner",
+    "restore": "not run: deferred by owner",
+    "lost_response_reconcile_snapshot": "not run: deferred by owner"
+  },
+  "advertised": [],
+  "sandbox_certified_configs": [],
+  "token_carried": ["create_from_base", "snapshot"],
+  "authoritative_task_token_lookup": false
+}

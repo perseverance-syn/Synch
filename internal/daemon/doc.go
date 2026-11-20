@@ -49,10 +49,15 @@
 //     the same way. The child records process.exited work=lost, a stderr line naming the
 //     reason, and takes T15 with a failure checkpoint carrying that reason, for the
 //     coordinator or operator to steer (decision 07).
-//   - Context controls and handoff (internal/context, card 303): every Builder child session
-//     starts with its role pack (Config.RoleSkillsDir), the project's guidance file and the
-//     target's guidance file, stable-first, each with source and digest; the coordinator gets
-//     none. Rollover (Rollover, SwitchHarness) and a failure checkpoint write a handoff file
+//   - Roles and skills (internal/roles, card 301): the coordinator picks Builder, Ops or
+//     Security from the brief and records the reason (dec. 06). The child's session gets that
+//     role's instructions and its skills pinned by ID and sha256 (StartRequest.Skills,
+//     assignment.dispatched.skills, Checkpoint.Skills); a rollover or harness switch resumes
+//     the checkpoint's pins or fails closed. Config.RoleSkillsDir is the trusted pack. Loading
+//     a role or skill never changes policy, grants or the thread's role.
+//   - Context controls and handoff (internal/context, card 303): every child session starts
+//     with its role instructions, the project's guidance file and the target's guidance file,
+//     stable-first, each with source and digest; the coordinator gets none. Rollover (Rollover, SwitchHarness) and a failure checkpoint write a handoff file
 //     into the worktree's git metadata directory (never the project's history; the data
 //     directory when the thread has no git checkout), and the checkpoint lists it. The next
 //     session, on any harness, starts with that handoff as stable instructions. CapOutput

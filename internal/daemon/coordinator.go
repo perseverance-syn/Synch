@@ -11,6 +11,7 @@ import (
 
 	"synch/internal/children"
 	"synch/internal/eventlog"
+	"synch/internal/roles"
 	"synch/internal/thread"
 )
 
@@ -109,7 +110,7 @@ func (d *Daemon) promote(ctx context.Context, state thread.State) (thread.State,
 	return d.threads.Status(ctx, state.ID)
 }
 
-// delegate creates one managed Builder child of the parent and records its
+// delegate creates one managed child (Builder, Ops or Security, decision 06) of the parent and records its
 // assignment (child.assignment_recorded) and audit setting through
 // internal/children. The child gets the brief as its purpose, the parent's
 // required checks as expected evidence and a revision to start from.
@@ -118,10 +119,12 @@ func (d *Daemon) delegate(ctx context.Context, parent thread.State, brief, revis
 	if len(evidence) == 0 {
 		evidence = []string{"project gates"}
 	}
+	// Decision 06: the specialist follows the required outcome; the reason is recorded with the assignment.
+	choice := roles.Choose(brief, evidence)
 	a := children.Assignment{
 		ParentThreadID: parent.ID, ChildThreadID: eventlog.NewID(), AssignmentID: eventlog.NewID(),
-		Purpose: brief, Role: "builder", InputRevision: revision,
-		RoleReason:          "Implementation work: the coordinator never runs commands, so a Builder child carries out the brief (dec. 05).",
+		Purpose: brief, Role: choice.Role, InputRevision: revision,
+		RoleReason:          choice.Reason,
 		AllowedCapabilities: []string{"assign.dispatch", "host.exec", "tool.use"},
 		ExpectedEvidence:    evidence,
 	}

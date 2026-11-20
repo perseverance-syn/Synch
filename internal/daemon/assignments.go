@@ -21,6 +21,7 @@ type assignment struct {
 	done           chan struct{}
 	harness, model string // the routed pair, kept for the failure checkpoint
 	watch          watchLimits
+	skills         []thread.Skill // the pinned skills of this assignment, kept for the checkpoint (guarded by Daemon.mu)
 }
 
 // --- Assignment lifecycle: dispatch, settle, and continue from checkpoints ---
@@ -103,7 +104,8 @@ func (d *Daemon) StartAssignment(ctx context.Context, req engine.StartRequest) e
 		}
 	}()
 	// Guidance is read before the dispatch commits so a bad file leaves the thread queued.
-	guidance, err := d.guidanceFor(project)
+	role := d.roleOf(ctx, req.ThreadID)
+	guidance, err := d.guidanceFor(project, role)
 	if err != nil {
 		return fmt.Errorf("load session guidance: %w", err)
 	}
@@ -115,6 +117,15 @@ func (d *Daemon) StartAssignment(ctx context.Context, req engine.StartRequest) e
 			return err
 		}
 		req.Instructions = instructions
+		// Skills are pinned here, at assignment time; a continued session keeps its checkpoint's pins.
+		skills, pins, err := d.skillsFor(role, cp)
+		if err != nil {
+			return fmt.Errorf("pin role skills: %w", err)
+		}
+		req.Skills = skills
+		d.mu.Lock()
+		active.skills = pins
+		d.mu.Unlock()
 		if remoteBound {
 			return d.startRemote(ctx, req)
 		}
@@ -130,7 +141,7 @@ func (d *Daemon) StartAssignment(ctx context.Context, req engine.StartRequest) e
 			"assignment_id": req.AssignmentID, "harness": route.Pair.Harness, "model": route.Pair.Model,
 			"adapter_capabilities_version": capabilities.Version, "pinned": route.Pinned,
 			"routing_reason": route.RoutingReason, "input_revision": revision,
-			"execution": d.driver.Kind(), "target": host, "skills": []any{},
+			"execution": d.driver.Kind(), "target": host, "skills": pinPayload(pins),
 		}, ""); err != nil {
 			return err
 		}
@@ -323,7 +334,11 @@ func (d *Daemon) harnessFailed(ctx context.Context, req engine.StartRequest, act
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
-	cp := thread.Checkpoint{ThreadID: req.ThreadID, Revision: revision, FailedAttempts: []thread.FailedAttempt{{
+	d.mu.Lock()
+	pins := active.skills
+	d.mu.Unlock()
+	// The checkpoint carries the pin so the next session, on any harness, keeps the same skills.
+	cp := thread.Checkpoint{ThreadID: req.ThreadID, Revision: revision, Skills: pins, FailedAttempts: []thread.FailedAttempt{{
 		Assignment: req.AssignmentID, Harness: active.harness, Model: active.model, Reason: reason}}}
 	// The failure itself must be recorded even when the handoff file cannot be written.
 	if err := d.writeHandoff(ctx, &cp, req.Workdir, state); err != nil {
@@ -362,12 +377,15 @@ func (d *Daemon) rollover(ctx context.Context, cp thread.Checkpoint, req engine.
 	if err := d.writeHandoff(ctx, &cp, req.Workdir, state); err != nil {
 		return fmt.Errorf("write handoff: %w", err)
 	}
+	d.mu.Lock()
+	prior := d.sessions[cp.ThreadID]
+	if prior != nil && len(cp.Skills) == 0 {
+		cp.Skills = prior.skills // the pin travels with the thread across rollover and harness switch
+	}
+	d.mu.Unlock()
 	if _, err := d.threads.Rollover(ctx, dir, cp, trigger); err != nil {
 		return err
 	}
-	d.mu.Lock()
-	prior := d.sessions[cp.ThreadID]
-	d.mu.Unlock()
 	if prior != nil {
 		prior.cancel()
 		select {
