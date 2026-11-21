@@ -581,3 +581,21 @@ func TestCapabilityMatrix(t *testing.T) {
 		t.Fatalf("unadvertised snapshot must be unavailable: %v", err)
 	}
 }
+
+func TestVerifySnapshot(t *testing.T) {
+	h, _, _, d := setup(t)
+	h.vms[0].snaps = []fakeSnap{{"saved", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", ""}}
+	for _, tc := range []struct {
+		vm, name string
+		ok       bool
+	}{{baseID, "saved", true}, {baseID, "missing", false}, {"22222222-2222-2222-2222-222222222222", "saved", false}} {
+		err := vm.VerifySnapshot(t.Context(), d, "lab", tc.vm, tc.name)
+		if (err == nil) != tc.ok || (!tc.ok && !errors.Is(err, vm.ErrSnapshot)) {
+			t.Fatalf("%+v: %v", tc, err)
+		}
+	}
+	h.vms[0].snaps = append(h.vms[0].snaps, fakeSnap{"saved", "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", ""})
+	if err := vm.VerifySnapshot(t.Context(), d, "lab", baseID, "saved"); !errors.Is(err, vm.ErrSnapshot) {
+		t.Fatalf("duplicate: %v", err)
+	}
+}

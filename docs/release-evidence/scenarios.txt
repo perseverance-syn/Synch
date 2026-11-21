@@ -1,0 +1,115 @@
+=== RUN   TestReleaseEvidence
+=== RUN   TestReleaseEvidence/S1
+    recovery_test.go:59: partial: API-to-CLI fixture passed; needs 601 authenticated harness
+=== RUN   TestReleaseEvidence/S2
+    fixtures_test.go:26: === RUN   TestCoordinatorDispatchesBuilderChild
+        --- PASS: TestCoordinatorDispatchesBuilderChild (1.37s)
+        === RUN   TestCancelParentCancelsChildFirst
+        --- PASS: TestCancelParentCancelsChildFirst (1.01s)
+        === RUN   TestChildDepthLimit
+        --- PASS: TestChildDepthLimit (0.12s)
+        === RUN   TestHarnessSwitchHandoff
+        --- PASS: TestHarnessSwitchHandoff (0.82s)
+        PASS
+        ok  	synch/internal/daemon	3.354s
+    fixtures_test.go:27: === RUN   TestDepthLimit
+        --- PASS: TestDepthLimit (0.08s)
+        === RUN   TestSimultaneousDispatchesKeepExcessQueued
+        --- PASS: TestSimultaneousDispatchesKeepExcessQueued (0.17s)
+        === RUN   TestIndependentAndDependentChildren
+        --- PASS: TestIndependentAndDependentChildren (0.20s)
+        === RUN   TestAttemptExhaustion
+        --- PASS: TestAttemptExhaustion (0.19s)
+        PASS
+        ok  	synch/internal/children	0.664s
+    fixtures_test.go:28: partial: lifecycle assertions are separate fixtures; harness pin change uses private state
+=== RUN   TestReleaseEvidence/S3
+    gates_test.go:57: partial: local gate not-run evidence shown; daemon requirement presentation not exercised
+=== RUN   TestReleaseEvidence/S4
+=== RUN   TestReleaseEvidence/S4/revision
+=== RUN   TestReleaseEvidence/S4/target
+=== RUN   TestReleaseEvidence/S5
+    fixtures_test.go:33: === RUN   TestModeSwitchSettlesAndRevokes
+        --- PASS: TestModeSwitchSettlesAndRevokes (1.48s)
+        PASS
+        ok  	synch/internal/daemon	1.512s
+=== RUN   TestReleaseEvidence/S6
+=== RUN   TestReleaseEvidence/S7
+=== RUN   TestReleaseEvidence/S7/Proxmox
+    snapshots_test.go:18: === RUN   TestProviderContract
+        === RUN   TestProviderContract/Proxmox
+        === RUN   TestProviderContract/Proxmox/lost_create_and_snapshot
+        --- PASS: TestProviderContract (0.02s)
+            --- PASS: TestProviderContract/Proxmox (0.02s)
+                --- PASS: TestProviderContract/Proxmox/lost_create_and_snapshot (0.01s)
+        PASS
+        ok  	synch/internal/vmdriver	0.035s
+    snapshots_test.go:19: reconciles; real host deferred by owner
+=== RUN   TestReleaseEvidence/S7/ESXi
+    snapshots_test.go:18: === RUN   TestProviderContract
+        === RUN   TestProviderContract/ESXi
+        === RUN   TestProviderContract/ESXi/lost_create_and_snapshot
+        --- PASS: TestProviderContract (0.02s)
+            --- PASS: TestProviderContract/ESXi (0.02s)
+                --- PASS: TestProviderContract/ESXi/lost_create_and_snapshot (0.02s)
+        PASS
+        ok  	synch/internal/vmdriver	0.037s
+    snapshots_test.go:19: reconciles; real host deferred by owner
+=== RUN   TestReleaseEvidence/S7/Workstation
+    snapshots_test.go:18: === RUN   TestLostSnapshotStaysUnknown
+        --- PASS: TestLostSnapshotStaysUnknown (0.01s)
+        PASS
+        ok  	synch/internal/vmdriver/workstation	0.025s
+    snapshots_test.go:19: pauses unknown; real host deferred by owner
+=== RUN   TestReleaseEvidence/S7/VirtualBox
+    snapshots_test.go:18: === RUN   TestLostSnapshotReconciles
+        --- PASS: TestLostSnapshotReconciles (0.00s)
+        PASS
+        ok  	synch/internal/vmdriver/virtualbox	0.018s
+    snapshots_test.go:19: reconciles; real host deferred by owner
+=== RUN   TestReleaseEvidence/S7/Hyper-V
+    snapshots_test.go:18: === RUN   TestLostResponse
+        === RUN   TestLostResponse/snapshot
+        --- PASS: TestLostResponse (0.00s)
+            --- PASS: TestLostResponse/snapshot (0.00s)
+        PASS
+        ok  	synch/internal/vmdriver/hyperv	0.018s
+    snapshots_test.go:19: reconciles; real host deferred by owner
+=== RUN   TestReleaseEvidence/S8
+    fixtures_test.go:38: === RUN   TestDisconnectReplay
+        --- PASS: TestDisconnectReplay (0.52s)
+        PASS
+        ok  	synch/internal/remote	0.536s
+    fixtures_test.go:39: partial: engine launchers require the Direct driver
+=== RUN   TestReleaseEvidence/S9
+    gates_test.go:85: partial: local gate rerun passed; CI mocks, audit and human acceptance not exercised
+=== NAME  TestReleaseEvidence
+    scenarios_test.go:160: S1 | partial | API to CLI history replay verified; needs 601 authenticated harness
+    scenarios_test.go:160: S2 | partial | existing lifecycle fixtures are separate; handoff pin change uses private state
+    scenarios_test.go:160: S3 | partial | local gate verified; daemon requirement presentation not exercised
+    scenarios_test.go:160: S4 | partial | policy fixture verified; daemon path not exercised
+    scenarios_test.go:160: S5 | partial | existing daemon fixture uses private setup and inspection helpers
+    scenarios_test.go:160: S6 | partial | broker redaction verified for retained output, excerpts and export; prompt and journal paths not exercised by this scenario
+    scenarios_test.go:160: S7 | partial | provider fixtures passed; real host deferred by owner
+    scenarios_test.go:160: S8 | partial | engine launchers require the Direct driver
+    scenarios_test.go:160: S9 | partial | local gate rerun verified; CI mocks, audit and human acceptance not exercised
+--- PASS: TestReleaseEvidence (13.81s)
+    --- PASS: TestReleaseEvidence/S1 (0.09s)
+    --- PASS: TestReleaseEvidence/S2 (5.43s)
+    --- PASS: TestReleaseEvidence/S3 (0.33s)
+    --- PASS: TestReleaseEvidence/S4 (0.17s)
+        --- PASS: TestReleaseEvidence/S4/revision (0.08s)
+        --- PASS: TestReleaseEvidence/S4/target (0.08s)
+    --- PASS: TestReleaseEvidence/S5 (2.45s)
+    --- PASS: TestReleaseEvidence/S6 (0.10s)
+    --- PASS: TestReleaseEvidence/S7 (3.10s)
+        --- PASS: TestReleaseEvidence/S7/Proxmox (0.64s)
+        --- PASS: TestReleaseEvidence/S7/ESXi (0.66s)
+        --- PASS: TestReleaseEvidence/S7/Workstation (0.68s)
+        --- PASS: TestReleaseEvidence/S7/VirtualBox (0.56s)
+        --- PASS: TestReleaseEvidence/S7/Hyper-V (0.56s)
+    --- PASS: TestReleaseEvidence/S8 (1.24s)
+    --- PASS: TestReleaseEvidence/S9 (0.91s)
+PASS
+ok  	synch/internal/scenarios	13.830s
+Exit: 0

@@ -2,6 +2,7 @@ package hyperv
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"synch/internal/vmdriver"
@@ -154,4 +155,19 @@ func carriesSingleOwner(notes, thread string) bool {
 		}
 	}
 	return vmdriver.CarriesOwner(notes, thread)
+}
+
+// VerifySnapshot checks a unique checkpoint and its VM identity without mutation.
+func (d *Driver) VerifySnapshot(ctx context.Context, endpoint, vm, name string) error {
+	if !validID(vm) || strings.TrimSpace(name) == "" {
+		return vmdriver.ErrSnapshot
+	}
+	list, err := d.checkpoints(ctx, endpoint, vm)
+	if err != nil {
+		return errors.Join(vmdriver.ErrSnapshot, err)
+	}
+	if _, ok := verifiedCheckpoint(list, vm, name); !ok {
+		return vmdriver.ErrSnapshot
+	}
+	return nil
 }

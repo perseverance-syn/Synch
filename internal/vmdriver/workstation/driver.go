@@ -323,3 +323,24 @@ func (d *Driver) FindByToken(ctx context.Context, endpoint, token, thread string
 	}
 	return out, nil
 }
+
+// VerifySnapshot checks a unique snapshot on the specified VM without mutation.
+func (d *Driver) VerifySnapshot(ctx context.Context, endpoint, vm, name string) error {
+	if !vmxPath.MatchString(vm) || !snapshotName.MatchString(name) {
+		return vmdriver.ErrSnapshot
+	}
+	names, err := d.snapshots(ctx, endpoint, vm)
+	if err != nil {
+		return errors.Join(vmdriver.ErrSnapshot, err)
+	}
+	count := 0
+	for _, n := range names {
+		if n == name {
+			count++
+		}
+	}
+	if count != 1 {
+		return vmdriver.ErrSnapshot
+	}
+	return nil
+}

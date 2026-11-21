@@ -8,9 +8,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"synch/internal/api"
 	"synch/internal/vmdriver"
+	"synch/internal/vmdriver/hyperv"
+	"synch/internal/vmdriver/virtualbox"
+	"synch/internal/vmdriver/workstation"
 )
 
 // fakeVM verifies one snapshot name and embeds the interface so nothing else is callable.
@@ -93,7 +97,9 @@ func TestCheckpointVerificationAtApproval(t *testing.T) {
 	cfg.VMOwns = func(string, string) (bool, error) { return owned, nil }
 	d, base := serveGate(t, cfg)
 	id := gateThread(t, base, "ckpt")
-	ref := func(name string) api.CheckpointRef { return api.CheckpointRef{Driver: "fake", Endpoint: "lab", VM: "100", Snapshot: name} }
+	ref := func(name string) api.CheckpointRef {
+		return api.CheckpointRef{Driver: "fake", Endpoint: "lab", VM: "100", Snapshot: name}
+	}
 	if err := d.verifyCheckpoint(t.Context(), id, ref("snap")); err != nil {
 		t.Fatalf("verified snapshot refused: %v", err)
 	}
@@ -158,5 +164,89 @@ func TestOutputSearchOwnership(t *testing.T) {
 	}
 	if code, _ := search(parent, unowned.Ref); code != 404 {
 		t.Fatalf("unowned reference searchable: %d", code)
+	}
+}
+
+type checkpointJournal struct {
+	vmdriver.Journal
+	owner vmdriver.Ownership
+}
+
+func (j checkpointJournal) Ownership(_ context.Context, endpoint, vm string) (vmdriver.Ownership, error) {
+	if endpoint != j.owner.Endpoint || vm != j.owner.VMRef {
+		return vmdriver.Ownership{}, nil
+	}
+	return j.owner, nil
+}
+func TestCheckpointJournalOwnership(t *testing.T) {
+	cfg, _ := gateConfig(t)
+	cfg.VMDrivers = map[string]vmdriver.VMDriver{"fake": fakeVM{good: "snap"}}
+	d, base := serveGate(t, cfg)
+	id := gateThread(t, base, "journal-owner")
+	ref := api.CheckpointRef{Driver: "fake", Endpoint: "lab", VM: "100", Snapshot: "snap"}
+	for _, tc := range []struct {
+		name  string
+		owner vmdriver.Ownership
+		ok    bool
+	}{
+		{"created", vmdriver.Ownership{Endpoint: "lab", VMRef: "100", OwnerThread: id, Basis: vmdriver.Created}, true},
+		{"assigned", vmdriver.Ownership{Endpoint: "lab", VMRef: "100", OwnerThread: id, Basis: vmdriver.Assigned, AssignedBy: "operator", AssignedAt: time.Unix(1, 0)}, true},
+		{"other owner", vmdriver.Ownership{Endpoint: "lab", VMRef: "100", OwnerThread: "other", Basis: vmdriver.Created}, false},
+		{"unknown", vmdriver.Ownership{}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d.vmJournal = checkpointJournal{owner: tc.owner}
+			err := d.verifyCheckpoint(t.Context(), id, ref)
+			if (err == nil) != tc.ok {
+				t.Fatalf("verification: %v", err)
+			}
+		})
+	}
+}
+
+type wsRunner struct{}
+
+func (wsRunner) Run(_ context.Context, _ string, _ []string) (workstation.Result, error) {
+	return workstation.Result{Stdout: "Total snapshots: 1\nsaved\n"}, nil
+}
+
+type vbRunner struct{}
+
+func (vbRunner) Run(_ context.Context, _ string, _ []string) (virtualbox.Result, error) {
+	return virtualbox.Result{Stdout: "SnapshotName=\"saved\"\nSnapshotUUID=\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\"\n"}, nil
+}
+func TestCheckpointVerificationDrivers(t *testing.T) {
+	broker := vmdriver.BrokerFunc(func(context.Context, string) (vmdriver.Credentials, error) { return vmdriver.Credentials{}, nil })
+	ws, err := workstation.New(map[string]string{"lab": "https://localhost"}, wsRunner{}, broker, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vb, err := virtualbox.New([]string{"lab"}, vbRunner{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := "11111111-1111-1111-1111-111111111111"
+	hv, err := hyperv.New(map[string]hyperv.Host{"lab": {}}, func(context.Context, hyperv.Command, vmdriver.Credentials) ([]byte, error) {
+		return []byte(`[{"Id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","VMId":"` + id + `","Name":"saved"}]`), nil
+	}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ := gateConfig(t)
+	cfg.VMDrivers = map[string]vmdriver.VMDriver{"workstation": ws, "virtualbox": vb, "hyperv": hv}
+	cfg.VMOwns = func(string, string) (bool, error) { return true, nil }
+	d, base := serveGate(t, cfg)
+	thread := gateThread(t, base, "drivers")
+	for _, tc := range []struct{ driver, vm string }{{"workstation", `C:\VMs\base.vmx`}, {"virtualbox", id}, {"hyperv", id}} {
+		t.Run(tc.driver, func(t *testing.T) {
+			ref := api.CheckpointRef{Driver: tc.driver, Endpoint: "lab", VM: tc.vm, Snapshot: "saved"}
+			if err := d.verifyCheckpoint(t.Context(), thread, ref); err != nil {
+				t.Fatal(err)
+			}
+			ref.Snapshot = "missing"
+			if err := d.verifyCheckpoint(t.Context(), thread, ref); !errors.Is(err, vmdriver.ErrSnapshot) {
+				t.Fatalf("missing: %v", err)
+			}
+		})
 	}
 }

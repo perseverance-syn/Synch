@@ -1,0 +1,197 @@
+PASS  parse drivers\finding.schema.json
+PASS  parse events\catalogue.schema.json
+PASS  parse events\envelope.schema.json
+PASS  parse events\runner-event.schema.json
+PASS  parse examples\events\audit-setting-recorded.json
+PASS  parse examples\events\check-result.json
+PASS  parse examples\events\child-assignment-recorded.json
+PASS  parse examples\events\child-result-recorded.json
+PASS  parse examples\events\thread-state-changed.json
+PASS  parse policy\examples\ask-firewall-plan-digest.json
+PASS  parse policy\examples\deny-destructive-git.json
+PASS  parse policy\examples\full-control-inherit-revoke.json
+PASS  parse policy\rule-file.schema.json
+PASS  parse tests\cases.json
+PASS  parse tests\digest-vectors.json
+PASS  compile events/envelope.schema.json
+PASS  compile events/runner-event.schema.json
+PASS  compile policy/rule-file.schema.json
+PASS  compile drivers/finding.schema.json
+PASS  compile events/catalogue.schema.json
+PASS  valid   policy/examples/ask-firewall-plan-digest.json (got valid)
+PASS  valid   policy/examples/deny-destructive-git.json (got valid)
+PASS  valid   policy/examples/full-control-inherit-revoke.json (got valid)
+PASS  valid   examples/events/audit-setting-recorded.json (got valid)
+PASS  valid   examples/events/check-result.json (got valid)
+PASS  valid   examples/events/child-assignment-recorded.json (got valid)
+PASS  valid   examples/events/child-result-recorded.json (got valid)
+PASS  valid   examples/events/thread-state-changed.json (got valid)
+PASS  openapi.yaml declares openapi 3.1.x with paths and components
+PASS  redocly lint api/openapi.yaml (no errors, no warnings)
+PASS  redocly bundle --dereferenced
+PASS  reject  R000-M05 ask rule omits approval (policy: got invalid)
+PASS  reject  R000-M06 ask binds only target (policy: got invalid)
+PASS  reject  R000-M07 approval omits approved_at (policy: got invalid)
+PASS  reject  R000-M08 empty revision is the sole work binding (policy: got invalid)
+PASS  reject  R000-M09 approval grants actions [*] (policy: got invalid)
+PASS  reject  R000-M10 T05 from completed to running (catalogue: got invalid)
+PASS  reject  R000-M11 transition id T99 (catalogue: got invalid)
+PASS  reject  R000-M12 T15 enters paused without reason (catalogue: got invalid)
+PASS  reject  R000-M13 thread transition on system stream (catalogue: got invalid)
+PASS  reject  R000-M14 sandbox active with host processes running (catalogue: got invalid)
+PASS  reject  R000-M15 scanner event with empty finding (catalogue: got invalid)
+PASS  reject  neg: skill file with allow rule (policy: got invalid)
+PASS  reject  neg: skill file carrying an approval (policy: got invalid)
+PASS  reject  neg: approval without worktree_digest (policy: got invalid)
+PASS  reject  neg: approval with both revision and plan_digest (policy: got invalid)
+PASS  reject  neg: firewall approval without rollback (policy: got invalid)
+PASS  reject  neg: approval with empty target (policy: got invalid)
+PASS  reject  neg: T21 leaving daemon_recovery (must be T22/T23/T36/T37) (catalogue: got invalid)
+PASS  reject  neg: T24 from plan_review (restart must not discard plan review) (catalogue: got invalid)
+PASS  reject  neg: pause_reason on a non-pause transition (catalogue: got invalid)
+PASS  reject  neg: external_request.persisted without endpoint (catalogue: got invalid)
+PASS  reject  neg: resolved via provider_task without task id (catalogue: got invalid)
+PASS  reject  neg: resolved unknown but claims a source (catalogue: got invalid)
+PASS  reject  neg: ingested runner event without source (catalogue: got invalid)
+PASS  reject  neg: plan.revised within_scope true with scope changes (catalogue: got invalid)
+PASS  reject  neg: resource.pressure on a thread stream (catalogue: got invalid)
+PASS  reject  neg: finding without component (finding: got invalid)
+PASS  reject  neg: finding report not marked redacted (finding: got invalid)
+PASS  reject  neg: runner-local event with daemon-only type (runner: got invalid)
+PASS  valid   pos: sandbox active after host processes stopped (catalogue: got valid)
+PASS  valid   pos: scanner finding event (catalogue: got valid)
+PASS  valid   pos: T24 records interrupted state (catalogue: got valid)
+PASS  valid   pos: T34 disagreement escalates to operator (catalogue: got valid)
+PASS  valid   pos: external request persisted with full identity (catalogue: got valid)
+PASS  valid   pos: ingested runner event with source (catalogue: got valid)
+PASS  valid   pos: runner-local journal event (runner: got valid)
+PASS  valid   pos: bounded staging approval (policy: got valid)
+PASS  valid   wire: receipts.md A request body (openapi#CreateThread: got valid)
+PASS  reject  wire: R000-R6 old example body with role is rejected (openapi#CreateThread: got invalid)
+PASS  valid   wire: receipts.md A receipt (openapi#Receipt: got valid)
+PASS  valid   wire: receipts.md B conflict problem (openapi#Problem: got valid)
+PASS  valid   wire: receipts.md C cancel command (openapi#ThreadCommand: got valid)
+PASS  valid   wire: receipts.md D accept command (openapi#ThreadCommand: got valid)
+PASS  reject  wire: rejected receipt must carry problem (openapi#Receipt: got invalid)
+PASS  reject  wire: receipt status conflict is not a receipt status (openapi#Receipt: got invalid)
+PASS  reject  wire: R000-R2 approve_plan without plan_digest (openapi#ThreadCommand: got invalid)
+PASS  valid   wire: approve_plan with digest (openapi#ThreadCommand: got valid)
+PASS  reject  wire: CreateApproval actions [*] (openapi#CreateApproval: got invalid)
+PASS  reject  wire: CreateApproval empty target (openapi#CreateApproval: got invalid)
+PASS  reject  wire: CreateApproval without worktree_digest (openapi#CreateApproval: got invalid)
+PASS  reject  wire: CreateApproval firewall without rollback (openapi#CreateApproval: got invalid)
+PASS  valid   wire: CreateApproval firewall complete (openapi#CreateApproval: got valid)
+PASS  reject  R000-2 T24 interrupted_state differs from from (catalogue: got invalid)
+PASS  reject  R000-2 T24 thread_id differs from stream owner (cross-check C1) (catalogue: got invalid)
+PASS  reject  R000-2 daemon grant.revoked without operator issuer (catalogue: got invalid)
+PASS  reject  R000-2 ask max_ttl PT1H1H (policy: got invalid)
+PASS  reject  R000-2 production approval bound only to a revision (policy: got invalid)
+PASS  reject  R000-2 operator resolution with empty note (catalogue: got invalid)
+PASS  reject  R000-2 not_executed attributed to a token-bearing resource (catalogue: got invalid)
+PASS  reject  R000-2 runner-local check.result with empty payload (runner: got invalid)
+PASS  reject  sib: network change approval bound only to a revision (policy: got invalid)
+PASS  reject  sib: approval expiring before it was approved (cross-check P1) (policy: got invalid)
+PASS  reject  sib: max_ttl PT (no components) (policy: got invalid)
+PASS  valid   pos: max_ttl P1DT2H30M (policy: got valid)
+PASS  valid   pos: production approval bound to plan digest (policy: got valid)
+PASS  reject  sib: failed attributed to a resulting resource (catalogue: got invalid)
+PASS  reject  sib: resulting_resource evidence for a start operation (catalogue: got invalid)
+PASS  reject  sib: resource evidence token of another request (cross-check C5) (catalogue: got invalid)
+PASS  valid   pos: succeeded via token-bearing snapshot (catalogue: got valid)
+PASS  valid   pos: not_executed via operator with note (catalogue: got valid)
+PASS  reject  sib: thread.created payload for another thread (cross-check C2) (catalogue: got invalid)
+PASS  reject  sib: approval.recorded for another thread (cross-check C3) (catalogue: got invalid)
+PASS  valid   pos: approval.recorded for its own thread (catalogue: got valid)
+PASS  reject  sib: grant.revoked cause operator without revoked_by (catalogue: got invalid)
+PASS  valid   pos: grant.revoked by operator (catalogue: got valid)
+PASS  valid   pos: grant ended with the granted thread (catalogue: got valid)
+PASS  reject  sib: policy.decided with unqualified rule id (catalogue: got invalid)
+PASS  valid   pos: policy.decided with qualified rule id (catalogue: got valid)
+PASS  reject  sib: T37 is retired (recovery waits in daemon_recovery) (catalogue: got invalid)
+PASS  reject  sib: T21 cannot leave daemon_recovery (catalogue: got invalid)
+PASS  valid   pos: T23 lost work found when leaving a reconciliation pause (catalogue: got valid)
+PASS  valid   pos: T36 lost work, attempts exhausted, from operator pause (catalogue: got valid)
+PASS  valid   pos: T24 from verifying (catalogue: got valid)
+PASS  reject  sib: runner-local policy.decided with wrong type_version (runner: got invalid)
+PASS  reject  wire: accepted receipt with http_status 500 (openapi#Receipt: got invalid)
+PASS  reject  wire: rejected receipt with http_status 201 (openapi#Receipt: got invalid)
+PASS  reject  wire: CreateApproval production bound only to revision (openapi#CreateApproval: got invalid)
+PASS  reject  R000-3 not_executed via response with own token on resulting resource (catalogue: got invalid)
+PASS  reject  R000-3 failed via response with own token on resulting resource (catalogue: got invalid)
+PASS  reject  R000-3 thread_ended revocation names an unrelated thread (cross-check C6) (catalogue: got invalid)
+PASS  reject  sib: thread_ended revocation before the granted thread is terminal (C6) (catalogue: got invalid)
+PASS  reject  sib: revocation of an unknown grant (C6) (catalogue: got invalid)
+PASS  reject  sib: not_executed via provider_task with a task id (catalogue: got invalid)
+PASS  reject  sib: authoritative absence carrying a task id (catalogue: got invalid)
+PASS  reject  sib: authoritative absence for another request token (C5) (catalogue: got invalid)
+PASS  reject  sib: succeeded via authoritative absence (catalogue: got invalid)
+PASS  reject  sib: unknown carrying resource evidence (catalogue: got invalid)
+PASS  reject  sib: succeeded via response carrying resource evidence (catalogue: got invalid)
+PASS  reject  sib: T38 from a non-recovery pause (catalogue: got invalid)
+PASS  valid   pos: not_executed via authoritative absence (catalogue: got valid)
+PASS  valid   pos: T38 recovery after a durable normal exit continues to verifying (catalogue: got valid)
+PASS  valid   pos: T21 out of no_eligible_pair before any process started (catalogue: got valid)
+PASS  valid   pos: T21 out of disk_pressure before any process started (catalogue: got valid)
+PASS  valid   pos: child.assignment_recorded with target and no dependencies (catalogue: got valid)
+PASS  valid   pos: child.result_recorded with empty groups (catalogue: got valid)
+PASS  valid   pos: audit.setting_recorded off with reason (catalogue: got valid)
+PASS  reject  C1-neg: child.assignment_recorded missing role_reason (catalogue: got invalid)
+PASS  reject  C1-neg: child.assignment_recorded empty role_reason (catalogue: got invalid)
+PASS  reject  C1-neg: child.assignment_recorded unknown field (catalogue: got invalid)
+PASS  reject  C1-neg: child.assignment_recorded bad role enum (catalogue: got invalid)
+PASS  reject  C1-neg: child.assignment_recorded neither input_revision nor target (catalogue: got invalid)
+PASS  reject  C1-neg: child.assignment_recorded no expected evidence (catalogue: got invalid)
+PASS  reject  C1-neg: child.assignment_recorded non-ULID child id (catalogue: got invalid)
+PASS  reject  C1-neg: child.assignment_recorded parent_thread_id differs from thread_id (C7) (catalogue: got invalid)
+PASS  reject  C1-neg: child.result_recorded missing checks (catalogue: got invalid)
+PASS  reject  C1-neg: child.result_recorded checks group missing (catalogue: got invalid)
+PASS  reject  C1-neg: child.result_recorded unknown field (catalogue: got invalid)
+PASS  reject  C1-neg: child.result_recorded bad outcome enum (catalogue: got invalid)
+PASS  reject  C1-neg: child.result_recorded unknown checks group (catalogue: got invalid)
+PASS  reject  C1-neg: child.result_recorded failed check without reason (catalogue: got invalid)
+PASS  reject  C1-neg: child.result_recorded empty revision (catalogue: got invalid)
+PASS  reject  C1-neg: audit.setting_recorded missing reason (catalogue: got invalid)
+PASS  reject  C1-neg: audit.setting_recorded empty reason (catalogue: got invalid)
+PASS  reject  C1-neg: audit.setting_recorded setting default is not a resolved value (catalogue: got invalid)
+PASS  reject  C1-neg: audit.setting_recorded unknown field (catalogue: got invalid)
+PASS  reject  C1-neg: audit.setting_recorded thread_id differs from envelope (C7) (catalogue: got invalid)
+PASS  reject  C1-neg: audit.setting_recorded system stream rejected (catalogue: got invalid)
+PASS  valid   pos: approval.declined rejected (catalogue: got valid)
+PASS  valid   pos: approval.declined changes_requested (catalogue: got valid)
+PASS  reject  C1-neg: approval.declined unknown decision (catalogue: got invalid)
+PASS  reject  C1-neg: approval.declined missing reason (catalogue: got invalid)
+PASS  reject  C1-neg: approval.declined empty reason (catalogue: got invalid)
+PASS  reject  C1-neg: approval.declined request_id not a ULID (catalogue: got invalid)
+PASS  reject  C1-neg: approval.declined unknown field (catalogue: got invalid)
+PASS  vector  reorder-a -> sha256:89242a142a3c69cebbe2f28bf31cf7adcc97db62f1c1d3bbe0c9a2173e725883
+PASS  vector  reorder-b -> sha256:89242a142a3c69cebbe2f28bf31cf7adcc97db62f1c1d3bbe0c9a2173e725883
+PASS  vector  unicode-nfc -> sha256:6b08c58d5996c0b5fdda4bdf55d5e36b67d04916cfc727e26faa6e26f744c943
+PASS  vector  unicode-nfc-raw -> sha256:6b08c58d5996c0b5fdda4bdf55d5e36b67d04916cfc727e26faa6e26f744c943
+PASS  vector  unicode-nfd -> sha256:874b5dc30ad5a68288a863b6b4cf1ef54567f84e07eb1d5f84b240302e39c402
+PASS  vector  unicode-lone-surrogate -> reject invalid_unicode
+PASS  vector  invalid-utf8 -> reject invalid_utf8
+PASS  vector  number-integer -> sha256:e81c30ee17c32fd51778cf83d76fb1ee0c9137fdcd162030c4963e477fcfc351
+PASS  vector  number-fraction-form -> reject number_not_integer
+PASS  vector  number-exponent-form -> reject number_not_integer
+PASS  vector  number-negative-zero -> reject number_not_integer
+PASS  vector  number-out-of-range -> reject number_out_of_range
+PASS  vector  duplicate-member -> reject duplicate_member
+PASS  vector  member-explicit-null -> sha256:a3f8deec74ea9fbf7cf8cf6455042cc0c5e10ac39a2e57b887ee458328741512
+PASS  vector  body-null-on-object-route -> reject body_must_be_object
+PASS  vector  body-absent-on-object-route -> reject body_must_be_object
+PASS  vector  revoke-body-absent -> sha256:f8401190f80118955f1a6a895802e14245135fa5456d5d7765e8660deb503211
+PASS  vector  revoke-body-null -> reject body_not_allowed
+PASS  vector  revoke-other-grant -> sha256:d89efe1a557594910365c263e8667b00415be7fa0a636d7b7ffe87218c76abd5
+PASS  vector  member-proto -> sha256:64ff5a8c56b7fca81bd919f35b0a235c3338819fa8e47559921a0300831cd5ba
+PASS  vector  member-constructor -> sha256:6ec448c1d35a7bd0dc379ca46429cd103875c3df59df2447bc2a8e0b812aec13
+PASS  vector  member-proto-duplicate -> reject duplicate_member
+PASS  vector  reorder-b digest == reorder-a
+PASS  vector  unicode-nfc-raw digest == unicode-nfc
+PASS  vector  unicode-nfd digest != unicode-nfc
+PASS  vector  member-explicit-null digest != reorder-a
+PASS  vector  revoke-other-grant digest != revoke-body-absent
+PASS  vector  member-proto digest != reorder-a
+PASS  vector  member-constructor digest != reorder-a
+
+ALL CHECKS PASSED
+Exit: 0

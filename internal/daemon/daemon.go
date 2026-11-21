@@ -81,8 +81,9 @@ type Config struct {
 
 	// VMDrivers maps a driver name to its VM driver. An approval whose rollback is a checkpoint
 	// reference (vmsnap:<driver>/<endpoint>/<vm>/<snapshot>) is admitted only if that driver
-	// verifies the snapshot. VMOwns reports whether a thread owns a VM (default: policy ownership).
+	// verifies the snapshot. VMJournal supplies ownership records; VMOwns overrides it when set.
 	VMDrivers map[string]vmdriver.VMDriver
+	VMJournal vmdriver.Journal
 	VMOwns    func(thread, vm string) (bool, error)
 
 	// Adapters replaces built-in adapters when non-nil. Factories receive the durable event sink.
@@ -125,6 +126,7 @@ type Daemon struct {
 	worktrees       map[string]string
 	worktreeProject map[string]gitops.Project
 	vmDrivers       map[string]vmdriver.VMDriver
+	vmJournal       vmdriver.Journal
 	vmOwns          func(thread, vm string) (bool, error)
 	supervisor      *supervisor.Supervisor
 	git             *gitops.Service
@@ -265,7 +267,7 @@ func (d *Daemon) configure(ctx context.Context, cfg Config) error {
 	}
 	d.outputs.SetRedactor(d.creds.Redactor())
 	d.creds.SetAuthorizer(d.authorizeSecret)
-	d.vmDrivers, d.vmOwns = cfg.VMDrivers, cfg.VMOwns
+	d.vmDrivers, d.vmOwns, d.vmJournal = cfg.VMDrivers, cfg.VMOwns, cfg.VMJournal
 	d.git = gitops.NewWithEvidence(d.decideGit, nil)
 	d.defaults = routing.Pair{Harness: cfg.DefaultHarness, Model: cfg.DefaultModel}
 	d.taskKind, d.routeData, d.projects, d.poll, d.noLoop = cfg.TaskKind, cfg.Evidence, cfg.Projects, cfg.poll, cfg.noLoop

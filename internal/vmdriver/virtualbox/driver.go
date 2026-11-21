@@ -253,7 +253,7 @@ func verified(list []snap, name string) (snap, bool) {
 			found, n = s, n+1
 		}
 	}
-	return found, n == 1 && found.UUID != ""
+	return found, n == 1 && vmUUID.MatchString(found.UUID)
 }
 
 // Snapshot takes a snapshot whose description is the request token. The name
@@ -330,4 +330,19 @@ func (d *Driver) FindByToken(ctx context.Context, endpoint, token, thread string
 		}
 	}
 	return out, nil
+}
+
+// VerifySnapshot checks a unique snapshot on the specified VM without mutation.
+func (d *Driver) VerifySnapshot(ctx context.Context, endpoint, vm, name string) error {
+	if !vmUUID.MatchString(vm) || !snapshotName.MatchString(name) {
+		return vmdriver.ErrSnapshot
+	}
+	list, err := d.snapshots(ctx, endpoint, vm)
+	if err != nil {
+		return errors.Join(vmdriver.ErrSnapshot, err)
+	}
+	if _, ok := verified(list, name); !ok {
+		return vmdriver.ErrSnapshot
+	}
+	return nil
 }

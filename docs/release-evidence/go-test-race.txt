@@ -1,0 +1,42 @@
+ok  	synch/cmd/synch	1.317s
+ok  	synch/internal/api	36.029s
+ok  	synch/internal/children	20.596s
+ok  	synch/internal/ci	1.515s
+ok  	synch/internal/ci/github	1.427s
+ok  	synch/internal/ci/gitlab	1.493s
+ok  	synch/internal/ci/jenkins	2.774s
+ok  	synch/internal/cli	15.067s
+ok  	synch/internal/context	5.562s
+ok  	synch/internal/credentials	1.654s
+ok  	synch/internal/daemon	111.381s
+ok  	synch/internal/engine	1.527s
+ok  	synch/internal/engine/claudecode	8.741s
+?   	synch/internal/engine/claudecode/stdio	[no test files]
+?   	synch/internal/engine/claudecode/stdio/fixturetest	[no test files]
+ok  	synch/internal/engine/codex	9.221s
+ok  	synch/internal/engine/kimi	1.424s
+ok  	synch/internal/eventlog	57.143s
+ok  	synch/internal/evidence	1.676s
+ok  	synch/internal/execdriver	5.792s
+ok  	synch/internal/findings	1.306s
+ok  	synch/internal/gates	7.897s
+ok  	synch/internal/gitops	98.219s
+ok  	synch/internal/mcp	1.419s
+ok  	synch/internal/policy	101.533s
+ok  	synch/internal/queue	9.674s
+ok  	synch/internal/remote	33.630s
+ok  	synch/internal/roles	1.464s
+ok  	synch/internal/routing	1.366s
+ok  	synch/internal/sandbox	1.399s
+?   	synch/internal/sandbox/sandboxtest	[no test files]
+ok  	synch/internal/scanner	14.180s
+ok  	synch/internal/scenarios	54.556s
+ok  	synch/internal/supervisor	6.881s
+ok  	synch/internal/thread	39.691s
+ok  	synch/internal/vmdriver	2.039s
+?   	synch/internal/vmdriver/esxi	[no test files]
+ok  	synch/internal/vmdriver/hyperv	1.322s
+?   	synch/internal/vmdriver/proxmox	[no test files]
+ok  	synch/internal/vmdriver/virtualbox	1.231s
+ok  	synch/internal/vmdriver/workstation	1.413s
+Exit: 0

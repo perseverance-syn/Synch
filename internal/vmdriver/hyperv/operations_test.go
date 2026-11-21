@@ -142,3 +142,24 @@ func TestDeferredCapabilities(t *testing.T) {
 		t.Fatalf("snapshot admission = %+v, %v", result, err)
 	}
 }
+
+func TestVerifySnapshot(t *testing.T) {
+	for _, tc := range []struct {
+		name, data string
+		ok         bool
+	}{
+		{"unique", `[{"ID":"` + cpID + `","VMId":"` + vmID + `","Name":"saved"}]`, true},
+		{"missing", "[]", false},
+		{"foreign", `[{"ID":"` + cpID + `","VMId":"` + cpID + `","Name":"saved"}]`, false},
+		{"duplicate", `[{"ID":"` + cpID + `","VMId":"` + vmID + `","Name":"saved"},{"ID":"` + vmID + `","VMId":"` + vmID + `","Name":"saved"}]`, false},
+		{"unreadable", "not json", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := testDriver(t, func(context.Context, Command, vmdriver.Credentials) ([]byte, error) { return []byte(tc.data), nil }, nil)
+			err := vmdriver.VerifySnapshot(t.Context(), d, endpoint, vmID, "saved")
+			if (err == nil) != tc.ok || (!tc.ok && !errors.Is(err, vmdriver.ErrSnapshot)) {
+				t.Fatalf("verification: %v", err)
+			}
+		})
+	}
+}

@@ -59,11 +59,18 @@ func (d *Daemon) verifyCheckpoint(ctx context.Context, id string, ref api.Checkp
 		return errors.New("unknown VM driver")
 	}
 	owns := d.vmOwns
-	if owns == nil {
-		owns = policyState{daemon: d}.OwnsVM
-	}
-	if ok, err := owns(id, ref.VM); err != nil || !ok {
-		return errors.Join(vmdriver.ErrSnapshot, err)
+	if owns != nil {
+		if ok, err := owns(id, ref.VM); err != nil || !ok {
+			return errors.Join(vmdriver.ErrSnapshot, err)
+		}
+	} else {
+		if d.vmJournal == nil {
+			return vmdriver.ErrSnapshot
+		}
+		owner, err := d.vmJournal.Ownership(ctx, ref.Endpoint, ref.VM)
+		if err != nil || !owner.CanMutate(ref.Endpoint, ref.VM, id) {
+			return errors.Join(vmdriver.ErrSnapshot, err)
+		}
 	}
 	return vmdriver.VerifySnapshot(ctx, driver, ref.Endpoint, ref.VM, ref.Snapshot)
 }
