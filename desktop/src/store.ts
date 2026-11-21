@@ -1,4 +1,5 @@
-// Live store: follows the `all` SSE stream and folds events into a thread model.
+// Live store: follows the `all` SSE stream and folds events into a thread model (tree, state, output).
+// Approvals, findings, checks, diffs and drivers are read from their API endpoints, not folded here.
 // The thread tree comes from events because GET /v1/threads lists root submissions only;
 // children exist only as thread.created events with parent_thread_id (catalogue 2.0.0).
 // Follow rules implement openapi.yaml streamEvents: resume from the last contiguous cursor L,
@@ -25,45 +26,11 @@ export type ThreadModel = {
   title?: string
   audit?: string
   latest?: string
-  checks: Map<string, { status: CheckStatus; reason?: string }>
   output: OutputLine[]
 }
 
-/** ApprovalRequest is a mediated action waiting for a human approval (policy.decided, outcome waiting_approval). */
-export type ApprovalRequest = { id: string; threadId: string; action: string; target: string; machine: string; ruleId?: string; at: string; status: 'pending' | 'approved' | 'voided' }
-
-/** ApprovalRecord is one approval.recorded payload (policy $defs/approval), with the void reason if it was voided. */
-export type ApprovalRecord = {
-  id: string; approver: string; thread: string; revision?: string; plan_digest?: string; worktree_digest: string; target: string
-  actions: string[]; approved_at: string; expires_at: string; rollback?: string; irreversible_effects?: string[]; voided?: string
-}
-
-/** Finding is one scanner finding (drivers/finding.schema.json) grouped by fingerprint, with every scan's provenance kept. */
-export type Finding = {
-  id: string; fingerprint: string; threadId: string; raw: number
-  tool: { name: string; version: string; db_version?: string }
-  rule: { id: string; title?: string }
-  severity: string
-  component: { type: string; name: string; version?: string; fixed_version?: string }
-  location: { path: string; start_line?: number; image_layer?: string; commit?: string }
-  evidence: { summary: string; snippet_redacted?: string; report: { digest: string } }
-  revision: string
-  provenance: { scan_id: string; tool: string; report: { digest: string }; native_id?: string }[]
-  triage?: { status: string; reason?: string; by?: string; at?: string }
-  at: string
-}
-
-/** Runner is a remote runner's last connection state (runner.connection). */
-export type Runner = { name: string; state: string; at: string; replayed?: [number, number] }
-
 /** Live is the store snapshot shared by every view. */
 export type Live = {
-  approvalRequests: ApprovalRequest[]
-  approvals: ApprovalRecord[]
-  planDigests: Map<string, string> // thread -> latest plan.revised digest
-  findings: Map<string, Finding> // fingerprint -> grouped finding
-  rawFindings: number
-  runners: Map<string, Runner>
   threads: Map<string, ThreadModel>
   order: string[] // creation order
   output: OutputLine[] // all threads, newest last
@@ -73,7 +40,7 @@ export type Live = {
 
 const MAX_LINES = 1000 // ponytail: ring buffer per thread and globally; page older history from events/page if needed
 
-let live: Live = { approvalRequests: [], approvals: [], planDigests: new Map(), findings: new Map(), rawFindings: 0, runners: new Map(), threads: new Map(), order: [], output: [], cursor: 0, streaming: false }
+let live: Live = { threads: new Map(), order: [], output: [], cursor: 0, streaming: false }
 let version = 0
 const listeners = new Set<() => void>()
 
@@ -107,7 +74,7 @@ export function onLiveChange(cb: () => void): () => void {
 function thread(id: string): ThreadModel {
   let t = live.threads.get(id)
   if (!t) {
-    t = { id, projectId: '', role: 'coordinator', depth: 0, state: 'draft', checks: new Map(), output: [] }
+    t = { id, projectId: '', role: 'coordinator', depth: 0, state: 'draft', output: [] }
     live.threads.set(id, t)
     live.order.push(id)
   }
@@ -167,57 +134,11 @@ export function apply(e: Event) {
     case 'engine.output':
       say(thread(id), e, (str(p.chunk) ?? '').trimEnd(), p.channel === 'stderr' ? 'error' : 'plain')
       break
-    case 'check.result': {
-      const t = thread(id)
-      const status = (str(p.status) ?? 'not_run') as CheckStatus
-      t.checks.set(str(p.check) ?? '?', { status, reason: str(p.reason) })
-      say(t, e, `check ${str(p.check)}: ${status.replace('_', ' ')}`, status === 'passed' ? 'plain' : 'warn')
+    case 'check.result':
+      say(thread(id), e, `check ${str(p.check)}: ${(str(p.status) ?? 'not_run').replace('_', ' ')}`, p.status === 'passed' ? 'plain' : 'warn')
       break
-    }
     case 'audit.status':
       thread(id).audit = str(p.status)
-      break
-    case 'plan.revised':
-      if (id && str(p.plan_digest)) live.planDigests.set(id, str(p.plan_digest) as string)
-      break
-    case 'policy.decided':
-      // A mediated action that needs a human: it stays pending until an approval covers it.
-      if (p.outcome === 'waiting_approval' && id)
-        live.approvalRequests.push({ id: e.id, threadId: id, action: str(p.action) ?? '?', target: str(p.target) ?? '', machine: str(p.machine) ?? '', ruleId: str(p.rule_id), at: e.recorded_at, status: 'pending' })
-      break
-    case 'approval.recorded': {
-      const a = p as unknown as ApprovalRecord
-      live.approvals.push(a)
-      for (const r of live.approvalRequests)
-        if (r.status === 'pending' && r.threadId === a.thread && a.actions.includes(r.action)) r.status = 'approved'
-      break
-    }
-    case 'approval.voided': {
-      const a = live.approvals.find((x) => x.id === str(p.approval_id))
-      if (a) a.voided = str(p.reason)
-      break
-    }
-    case 'finding.recorded': {
-      if (p.source !== 'scanner') break // audit and review findings have another shape and belong to the audit view
-      const f = { ...(p.finding as Finding), threadId: id, raw: 1, at: e.recorded_at }
-      live.rawFindings++
-      const old = live.findings.get(f.fingerprint)
-      if (old) {
-        // Same fingerprint: one finding, provenance of every scan kept; the newest triage wins.
-        const seen = new Set(old.provenance.map((x) => x.scan_id + x.report.digest))
-        old.provenance.push(...f.provenance.filter((x) => !seen.has(x.scan_id + x.report.digest)))
-        old.raw++
-        old.triage = f.triage ?? old.triage
-      } else live.findings.set(f.fingerprint, f)
-      break
-    }
-    case 'runner.connection':
-      live.runners.set(str(p.runner) ?? '?', {
-        name: str(p.runner) ?? '?',
-        state: str(p.state) ?? '?',
-        at: e.recorded_at,
-        replayed: typeof p.replayed_to_seq === 'number' ? [Number(p.replayed_from_seq ?? 0), p.replayed_to_seq] : undefined,
-      })
       break
     default:
       if (id && live.threads.has(id)) say(thread(id), e, e.type)
@@ -234,7 +155,7 @@ let timer: ReturnType<typeof setTimeout> | undefined
 
 // reset drops all stream-derived state before a resync from cursor 0.
 function reset() {
-  live = { approvalRequests: [], approvals: [], planDigests: new Map(), findings: new Map(), rawFindings: 0, runners: new Map(), threads: new Map(), order: [], output: [], cursor: 0, streaming: live.streaming }
+  live = { threads: new Map(), order: [], output: [], cursor: 0, streaming: live.streaming }
   changed()
 }
 

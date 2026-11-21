@@ -228,3 +228,6 @@ textarea { resize: vertical; font-family: var(--sans); }
 .settings-grid { display: block; max-width: 880px; padding-top: 6px; padding-bottom: 6px; } .settings-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
 .sub-text { color: var(--dim); font-size: 14px; margin-left: 4px; }
 .wt-input { width: 100%; max-width: 560px; padding: 6px 10px; font-size: 12.5px; }
+.diff { margin: 8px 12px; padding: 8px 0; background: var(--panel); border: 1px solid var(--line-2); border-radius: 8px; overflow: auto; max-height: 60vh; } .diff div { padding: 0 12px; white-space: pre; }
+.diff-add { background: rgba(80, 200, 120, .16); color: #7fd99a; } .diff-del { background: rgba(240, 90, 90, .16); color: #f08a8a; } .diff-hunk { color: #7c80f2; } .diff-file { color: var(--muted, #8b8d93); font-weight: 600; }
+.search-results { margin: 6px 0; max-height: 160px; overflow: auto; } .diff-panel form input { width: 100%; }

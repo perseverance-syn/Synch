@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, bridge, get, unreachable, type Health } from './api'
-import { reconnectNow, startFollow, useLive } from './store'
+import { onLiveChange, reconnectNow, startFollow, useLive } from './store'
 import { ThreadsView, LiveOutput, roleColor } from './Threads'
 import { ApprovalsView } from './Approvals'
 import { FindingsView } from './Findings'
@@ -133,10 +133,27 @@ export function Shell({ url }: { url: string }) {
   for (const t of live.threads.values()) if (t.projectId === current) roleCounts.set(t.role, (roleCounts.get(t.role) ?? 0) + 1)
 
   // Rail badges: waiting approvals and grouped findings.
+  const qc = useQueryClient()
+  const approvals = useQuery({ queryKey: ['approvals', 'pending'], queryFn: () => get<{ approvals: unknown[] }>('/v1/approvals?state=pending'), refetchInterval: 15000, retry: false })
+  const findings = useQuery({ queryKey: ['findings', '', ''], queryFn: () => get<{ findings: unknown[] }>('/v1/findings'), refetchInterval: 15000, retry: false })
   const badge: Partial<Record<View, number>> = {
-    Approvals: live.approvalRequests.filter((r) => r.status === 'pending').length,
-    Findings: live.findings.size,
+    Approvals: approvals.data?.approvals.length ?? 0,
+    Findings: findings.data?.findings.length ?? 0,
   }
+  // Endpoint-backed lists refresh shortly after live events, so a decision or a new finding shows without waiting for the poll.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const off = onLiveChange(() => {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        for (const key of ['approvals', 'findings', 'thread', 'diff']) void qc.invalidateQueries({ queryKey: [key] })
+      }, 400)
+    })
+    return () => {
+      off()
+      clearTimeout(timer)
+    }
+  }, [qc])
 
   const down = health.isError && unreachable(health.error)
   const rejected = health.error instanceof ApiError && health.error.status === 401

@@ -1,13 +1,14 @@
 // Findings view (docs/design-reference/findings.png): severity chips, findings table and a detail panel.
-// The API has no findings read endpoint yet, so the table is folded from finding.recorded events in the
-// live store (duplicates grouped by fingerprint, provenance kept). Triage (confirm, false positive,
-// accepted risk) has no write endpoint either, so those buttons are disabled; "Create fix thread" uses POST /v1/threads.
+// Rows come from GET /v1/findings (grouped by the daemon); the severity and status chips are the
+// `severity` and `status` query parameters. Triage (confirm, false positive, accepted risk) has no write
+// endpoint, so those buttons stay disabled; "Create fix thread" uses POST /v1/threads.
 import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ApiError, command, type CommandResult } from './api'
-import { useLive, type Finding } from './store'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ApiError, command, get, type CommandResult, type FindingGroup } from './api'
+import { useLive } from './store'
 
 const SEVERITIES = ['critical', 'high', 'medium', 'low', 'info'] as const
+const STATUSES = ['open', 'confirmed', 'fixed', 'false_positive', 'accepted_risk'] as const
 const SEV_ICON: Record<string, string> = { critical: '▲▲', high: '▲', medium: '●', low: '▽', info: 'i' }
 const SEV_TONE: Record<string, string> = { critical: 'red', high: 'amber', medium: 'amber', low: 'blue', info: 'plain', unknown: 'plain' }
 const FIX: Record<string, { label: string; tone: string }> = {
@@ -18,19 +19,7 @@ const FIX: Record<string, { label: string; tone: string }> = {
   accepted_risk: { label: 'accepted risk', tone: 'violet' },
 }
 
-// sevRank orders severities from critical down; unknown sorts last.
-const sevRank = (s: string) => ((SEVERITIES as readonly string[]).indexOf(s) === -1 ? 9 : (SEVERITIES as readonly string[]).indexOf(s))
-
-// status returns the fix status of a finding; a finding with no triage is open.
-const status = (f: Finding) => f.triage?.status ?? 'open'
-
-// where renders the finding location as path:line, with the image layer or commit when present.
-function where(f: Finding): string {
-  const l = f.location
-  return `${l.path}${l.start_line ? ':' + l.start_line : ''}${l.image_layer ? ' ' + l.image_layer : ''}${l.commit ? ' @ ' + l.commit.slice(0, 7) : ''}`
-}
-
-// short abbreviates a digest for display.
+// short abbreviates a digest or id for display.
 const short = (s: string) => (s.length > 22 ? `${s.slice(0, 14)}…${s.slice(-4)}` : s)
 
 // SevPill is the severity pill with its icon.
@@ -48,16 +37,27 @@ function FixPill({ s }: { s: string }) {
   return <span className={`pill ${f.tone}`}>{f.label}</span>
 }
 
-/** FindingsView shows grouped scanner findings from the event stream, filtered by severity. */
+// useFindings reads GET /v1/findings with the severity and status filters as query parameters.
+function useFindings(severity: string, status: string) {
+  const qs = new URLSearchParams()
+  if (severity) qs.set('severity', severity)
+  if (status) qs.set('status', status)
+  const q = qs.toString()
+  return useQuery({ queryKey: ['findings', severity, status], queryFn: () => get<{ findings: FindingGroup[] }>(`/v1/findings${q ? '?' + q : ''}`), refetchInterval: 15000, retry: false })
+}
+
+/** FindingsView shows the finding groups returned by the daemon, filtered by severity and status. */
 export function FindingsView() {
-  const live = useLive()
-  const all = [...live.findings.values()].sort((a, b) => sevRank(a.severity) - sevRank(b.severity))
-  const [filter, setFilter] = useState('all')
+  const [severity, setSeverity] = useState('')
+  const [status, setStatus] = useState('')
   const [sel, setSel] = useState('')
-  const rows = filter === 'all' ? all : all.filter((f) => f.severity === filter)
-  const cur = all.find((f) => f.fingerprint === sel) ?? rows[0]
+  const q = useFindings(severity, status)
+  const unfiltered = useFindings('', '') // chip counts always come from the whole list
+  const rows = q.data?.findings ?? []
+  const all = unfiltered.data?.findings ?? []
+  const cur = rows.find((f) => f.key === sel) ?? rows[0]
   const count = (s: string) => all.filter((f) => f.severity === s).length
-  const revision = all.length ? all[all.length - 1].revision : ''
+  const occurrences = all.reduce((n, f) => n + f.occurrences, 0)
 
   return (
     <section className="page">
@@ -68,19 +68,30 @@ export function FindingsView() {
           security
         </span>
         <span className="sub mono">
-          {revision && `revision ${revision.slice(0, 7)} · `}
-          {all.length} findings from {live.rawFindings} raw · {live.rawFindings - all.length} duplicates grouped
+          {all.length} groups from {occurrences} findings · {occurrences - all.length} duplicates grouped
         </span>
       </div>
       <div className="filters">
-        <button className={`chip ${filter === 'all' ? 'on' : ''}`} onClick={() => setFilter('all')}>
+        <button className={`chip ${!severity ? 'on' : ''}`} onClick={() => setSeverity('')}>
           All <span className="mono">{all.length}</span>
         </button>
         {SEVERITIES.map((s) => (
-          <button key={s} className={`chip ${filter === s ? 'on' : ''}`} onClick={() => setFilter(s)}>
+          <button key={s} className={`chip ${severity === s ? 'on' : ''}`} onClick={() => setSeverity(s)}>
             <span className={`sev-icon ${SEV_TONE[s]}-text`}>{SEV_ICON[s]}</span> {s} <span className="mono">{count(s)}</span>
           </button>
         ))}
+        <span className="grow" />
+        <label className="inline small">
+          Status
+          <select value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="">any</option>
+            {STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {FIX[s].label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
       <div className="split">
         <div className="table-wrap">
@@ -88,27 +99,27 @@ export function FindingsView() {
             <thead>
               <tr>
                 <th>Severity</th>
+                <th>Source</th>
                 <th>Tool</th>
                 <th>Rule</th>
-                <th>Component</th>
                 <th>Location</th>
-                <th>Scans</th>
+                <th>Seen</th>
                 <th>Fix status</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((f) => (
-                <tr key={f.fingerprint} className={f === cur ? 'selected' : ''} onClick={() => setSel(f.fingerprint)}>
+                <tr key={f.key} className={f === cur ? 'selected' : ''} onClick={() => setSel(f.key)}>
                   <td>
                     <SevPill s={f.severity} />
                   </td>
-                  <td className="mono dim">{f.tool.name}</td>
-                  <td className="mono strong">{f.rule.id}</td>
-                  <td>{f.component.type === 'secret' ? 'secret (redacted)' : `${f.component.name}${f.component.version ? ' ' + f.component.version : ''}`}</td>
-                  <td className="mono dim small">{where(f)}</td>
-                  <td className="mono dim small">{f.provenance.length > 1 ? `×${f.provenance.length} scans` : '1 scan'}</td>
+                  <td className="mono dim small">{f.source.replace('_', ' ')}</td>
+                  <td className="mono dim">{f.tool}</td>
+                  <td className="mono strong">{f.rule ?? '—'}</td>
+                  <td className="mono dim small">{f.location ?? '—'}</td>
+                  <td className="mono dim small">{f.occurrences > 1 ? `×${f.occurrences}` : '1×'}</td>
                   <td>
-                    <FixPill s={status(f)} />
+                    <FixPill s={f.status} />
                   </td>
                 </tr>
               ))}
@@ -116,28 +127,26 @@ export function FindingsView() {
           </table>
           {rows.length === 0 && (
             <p className="empty">
-              {all.length === 0 ? 'No scanner findings recorded yet. They appear here when a scan records finding.recorded events.' : 'No findings at this severity.'}
+              {q.isError ? 'Findings could not be loaded.' : all.length === 0 ? 'No findings recorded yet. They appear here when a scan or review records finding.recorded events.' : 'No findings match these filters.'}
             </p>
           )}
         </div>
-        {cur ? <Detail key={cur.fingerprint} f={cur} /> : <aside className="detail" />}
+        {cur ? <Detail key={cur.key} f={cur} /> : <aside className="detail" />}
       </div>
     </section>
   )
 }
 
-// Detail is the right panel: facts, grouped scans, redacted evidence and fix-status actions.
-function Detail({ f }: { f: Finding }) {
+// Detail is the right panel: facts, grouped provenance and fix-status actions.
+function Detail({ f }: { f: FindingGroup }) {
   const qc = useQueryClient()
   const live = useLive()
   const [last, setLast] = useState<{ ok: boolean; text: string } | null>(null)
-  const project = live.threads.get(f.threadId)?.projectId
+  const project = f.threads.map((id) => live.threads.get(id)?.projectId).find(Boolean)
   const fix = useMutation({
     mutationFn: (): Promise<CommandResult> => {
       if (!project) throw new Error('The finding’s thread has no project yet.')
-      const at = `${f.location.path}${f.location.start_line ? ':' + f.location.start_line : ''}`
-      const to = f.component.fixed_version ? ` Upgrade to ${f.component.fixed_version}.` : ''
-      return command('/v1/threads', { project_id: project, brief: `Fix ${f.rule.id} in ${f.component.name} (${at}).${to} Finding fingerprint ${f.fingerprint}.` })
+      return command('/v1/threads', { project_id: project, brief: `Fix ${f.rule ?? f.key} (${f.location ?? 'location unknown'}). ${f.summary ?? ''} Finding group ${f.key}.` })
     },
     onSuccess: (c) => {
       setLast({ ok: true, text: `${c.receipt.command} accepted · receipt ${c.receipt.receipt_id} · request ${c.requestId}` })
@@ -149,37 +158,33 @@ function Detail({ f }: { f: Finding }) {
   return (
     <aside className="detail">
       <div className="detail-head find-head">
-        <h2 className="mono">{f.rule.id}</h2>
+        <h2 className="mono">{f.rule ?? f.key}</h2>
         <div className="pills">
           <SevPill s={f.severity} />
-          <FixPill s={status(f)} />
+          <FixPill s={f.status} />
         </div>
       </div>
       <div className="card kvs tight">
-        <Fact k="Component" v={f.component.type === 'secret' ? 'secret (redacted)' : `${f.component.name}${f.component.version ? ' ' + f.component.version : ''}`} />
-        <Fact k="Tool" v={`${f.tool.name} ${f.tool.version}`} />
-        <Fact k="Location" v={where(f)} />
-        {f.component.fixed_version && <Fact k="Fixed in" v={f.component.fixed_version} />}
-        <Fact k="Fingerprint" v={short(f.fingerprint)} />
-        <Fact k="Revision" v={f.revision.slice(0, 7)} />
+        <Fact k="Source" v={f.source.replace('_', ' ')} />
+        <Fact k="Tool" v={f.tool} />
+        <Fact k="Location" v={f.location ?? '—'} />
+        {f.fingerprint && <Fact k="Fingerprint" v={short(f.fingerprint)} />}
+        <Fact k="Threads" v={f.threads.map((t) => t.slice(-6)).join(', ')} />
+        <Fact k="First seen" v={f.first_seen} />
+        <Fact k="Last seen" v={f.last_seen} />
       </div>
       <h6 className="section">
-        Grouped from {f.provenance.length} scan{f.provenance.length === 1 ? '' : 's'} · provenance kept
+        Grouped from {f.occurrences} finding{f.occurrences === 1 ? '' : 's'} · provenance kept
       </h6>
-      {f.provenance.map((p) => (
-        <div key={p.scan_id + p.report.digest} className="card prov mono small">
-          scan {short(p.scan_id)} · {p.tool}
-          {f.tool.db_version ? ` · db ${f.tool.db_version}` : ''}
-          <br />
-          report {short(p.report.digest)} · redacted{p.native_id ? ` · native id ${p.native_id}` : ''}
+      {f.provenance.map((p, i) => (
+        <div key={i} className="card prov mono small">
+          {Object.entries(p)
+            .map(([k, v]) => `${k} ${typeof v === 'string' ? short(v) : JSON.stringify(v)}`)
+            .join(' · ')}
         </div>
       ))}
       <h6 className="section">Evidence · redacted</h6>
-      <pre className="evidence-box mono small">
-        {f.evidence.summary}
-        {f.evidence.snippet_redacted ? '\n' + f.evidence.snippet_redacted : ''}
-        {f.component.fixed_version ? <span className="ok-text">{`\nUpgrade to v${f.component.fixed_version}.`}</span> : null}
-      </pre>
+      <pre className="evidence-box mono small">{f.summary ?? 'No summary recorded.'}</pre>
       <h6 className="section">Fix status</h6>
       <div className="actions pad-x">
         <button className="btn primary" disabled={fix.isPending || !project} onClick={() => fix.mutate()}>

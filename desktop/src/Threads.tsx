@@ -1,10 +1,10 @@
 // Threads view (docs/design-reference/threads.png): summary chips, department filter, thread tree
-// table, right detail panel with pause box, grant wait, commands, checks and live output, and the
+// table, right detail panel with pause box, grant wait, commands, checks (from the thread view) and live output, and the
 // New task dialog. State, tree, checks and output come from the live event store; titles come from
 // the creating receipt (root) or the child assignment purpose; harness/model/waiting_for from GET /v1/threads.
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, command, get, type CommandResult, type Receipt, type ThreadView } from './api'
+import { ApiError, bridge, command, get, type CommandResult, type Receipt, type ThreadView } from './api'
 import { onLiveChange, useLive, type CheckStatus, type OutputLine, type ThreadModel } from './store'
 
 // --- Small presentational helpers shared with the shell ---
@@ -67,6 +67,11 @@ export const CHECKS: Record<CheckStatus, { icon: string; label: string; tone: st
   error: { icon: '!', label: 'error', tone: 'red' },
   partial: { icon: '◐', label: 'partial', tone: 'amber' },
   not_run: { icon: '○', label: 'not run', tone: 'plain' },
+}
+
+/** flatChecks lists every check of a thread view as [name, status] in the five-status order. */
+export function flatChecks(v?: ThreadView): [string, CheckStatus][] {
+  return (Object.keys(CHECKS) as CheckStatus[]).flatMap((s) => (v?.checks?.[s] ?? []).map((n): [string, CheckStatus] => [n, s]))
 }
 
 const PAUSE_TEXT: Record<string, string> = {
@@ -278,7 +283,10 @@ export function AuditPill({ status }: { status?: string }) {
 
 // Detail is the right panel for the selected thread.
 function Detail({ row, streaming }: { row: Row; streaming: boolean }) {
-  const { t, view } = row
+  const { t } = row
+  // GET /v1/threads lists root submissions only, so the panel reads its own thread view (children, checks, requirements).
+  const one = useQuery({ queryKey: ['thread', t.id], queryFn: () => get<ThreadView>(`/v1/threads/${t.id}`), retry: false })
+  const view = one.data ?? row.view
   const qc = useQueryClient()
   const [last, setLast] = useState<{ ok: boolean; text: string } | null>(null)
   useEffect(() => setLast(null), [t.id])
@@ -293,7 +301,18 @@ function Detail({ row, streaming }: { row: Row; streaming: boolean }) {
   const terminal = ['completed', 'failed', 'cancelled'].includes(t.state)
   const meta = [view?.harness, view?.model, view?.revision ? `rev ${view.revision.slice(0, 7)}` : '', t.id].filter(Boolean)
   const grant = view?.waiting_for?.match(/`([^`]+)`/)?.[1]
-  const checks = [...t.checks]
+  const checks = flatChecks(view)
+  const [exporting, setExporting] = useState(false)
+  const [exported, setExported] = useState<{ ok: boolean; text: string } | null>(null)
+  useEffect(() => setExported(null), [t.id])
+  // exportEvidence asks the main process to download the evidence zip and show the save dialog.
+  async function exportEvidence() {
+    setExporting(true)
+    const r = await bridge().saveEvidence(t.id)
+    setExporting(false)
+    if (r.error) setExported({ ok: false, text: `Export failed: ${r.error}` })
+    else if (r.saved) setExported({ ok: true, text: `Saved ${r.path} · ${r.bytes} bytes${r.digest ? ' · manifest ' + r.digest : ''}` })
+  }
   const receipt = last && <p className={`receipt mono ${last.ok ? '' : 'error-text'}`}>{last.text}</p>
 
   return (
@@ -357,18 +376,40 @@ function Detail({ row, streaming }: { row: Row; streaming: boolean }) {
       <h6 className="section">Checks</h6>
       <div className="checks">
         {checks.length === 0 && <p className="muted small">No checks recorded yet.</p>}
-        {checks.map(([name, c]) => (
+        {checks.map(([name, status]) => (
           <div className="check" key={name}>
             <div className="check-row">
               <span className="mono">{name}</span>
-              <span className={`pill ${CHECKS[c.status]?.tone ?? 'plain'}`}>
-                {CHECKS[c.status]?.icon} {CHECKS[c.status]?.label ?? c.status}
+              <span className={`pill ${CHECKS[status].tone}`}>
+                {CHECKS[status].icon} {CHECKS[status].label}
               </span>
             </div>
-            {c.reason && <p className="muted small">{c.reason}</p>}
           </div>
         ))}
       </div>
+      {(view?.open_requirements ?? []).length > 0 && (
+        <>
+          <h6 className="section">Open requirements</h6>
+          <div className="checks">
+            {view?.open_requirements?.map((r) => (
+              <div className="check" key={r.kind + r.id}>
+                <div className="check-row">
+                  <span className="mono">
+                    {r.kind} · {r.id}
+                  </span>
+                  <span className="pill amber">{(r.status ?? 'open').replaceAll('_', ' ')}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      <div className="actions pad-x">
+        <button className="btn" disabled={exporting} onClick={() => void exportEvidence()}>
+          Export evidence
+        </button>
+      </div>
+      {exported && <p className={`receipt mono pad-x ${exported.ok ? '' : 'error-text'}`}>{exported.text}</p>}
 
       <LiveOutput lines={t.output} streaming={streaming} />
     </aside>

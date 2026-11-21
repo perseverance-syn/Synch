@@ -4,9 +4,11 @@
 // Evidence (the five check words, audit) is shown beside it but is never part of the approval.
 import { useEffect, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, command, get, type CommandResult, type ThreadView } from './api'
-import { useLive, type ApprovalRecord, type ApprovalRequest } from './store'
-import { AuditPill, CHECKS, EXECUTION, roleColor } from './Threads'
+import { ApiError, command, get, type ApprovalItem, type CommandResult, type ThreadView } from './api'
+import { useLive } from './store'
+import { AuditPill, CHECKS, EXECUTION, cap, flatChecks, roleColor } from './Threads'
+
+const OUTCOME = { approved: 'approved', rejected: 'rejected', changes_requested: 'changes requested' }
 
 /** OPERATIONAL actions must bind the plan digest and state rollback and irreversible effects (openapi CreateApproval). */
 const OPERATIONAL = ['net.firewall_change', 'net.network_change', 'deploy.production']
@@ -36,14 +38,15 @@ const short = (s: string, n = 14) => (s.length > n + 8 ? `${s.slice(0, n)}…${s
 
 /** ApprovalsView lists pending requests and recent decisions and shows the selected one in full. */
 export function ApprovalsView() {
-  const live = useLive()
-  const pending = live.approvalRequests.filter((r) => r.status === 'pending')
-  const decided = [...live.approvals].reverse().slice(0, 20)
+  const list = useQuery({ queryKey: ['approvals'], queryFn: () => get<{ approvals: ApprovalItem[] }>('/v1/approvals'), refetchInterval: 15000, retry: false })
+  const all = list.data?.approvals ?? []
+  const pending = all.filter((r) => r.state === 'pending')
+  const decided = all.filter((r) => r.state === 'decided').reverse().slice(0, 20)
   const [sel, setSel] = useState('')
-  // Selection is a request event id or an approval id; fall back to the first pending request.
-  // An approved request stays selected so its receipt remains on screen until the operator moves on.
-  const request = live.approvalRequests.find((r) => r.id === sel) ?? (decided.some((a) => a.id === sel) ? undefined : pending[0])
-  const record = request ? undefined : decided.find((a) => a.id === sel)
+  // The receipt of the last decision stays on screen after the request moves to Recently decided.
+  const [receipt, setReceipt] = useState<{ id: string; ok: boolean; text: string } | null>(null)
+  // A decided request stays selectable so its receipt and outcome remain on screen; otherwise the first pending one.
+  const picked = all.find((r) => r.request_id === sel) ?? pending[0]
 
   return (
     <section className="page">
@@ -56,30 +59,30 @@ export function ApprovalsView() {
         <div className="appr-list">
           {pending.length === 0 && <p className="empty small">No approvals are waiting.</p>}
           {pending.map((r) => (
-            <button key={r.id} className={`appr-item ${r === request ? 'on' : ''}`} onClick={() => setSel(r.id)}>
+            <button key={r.request_id} className={`appr-item ${r === picked ? 'on' : ''}`} onClick={() => setSel(r.request_id)}>
               <b>{r.action}</b>
               <span className="mono muted small">
-                {r.target || r.machine} · thread {short(r.threadId, 8)}
+                {r.target || '—'} · thread {short(r.thread_id, 8)}
               </span>
               <span className="pills">
                 <span className="pill amber">Approval needed</span>
-                <span className="pill mono">waiting since {utc(Date.parse(r.at)).slice(0, 5)}</span>
+                <span className="pill mono">waiting since {utc(Date.parse(r.requested_at)).slice(0, 5)}</span>
               </span>
             </button>
           ))}
           <h6 className="section">Recently decided</h6>
           {decided.length === 0 && <p className="muted small pad-x">Nothing decided yet.</p>}
           {decided.map((a) => (
-            <button key={a.id} className={`appr-done mono ${a === record ? 'on' : ''}`} onClick={() => setSel(a.id)}>
-              {a.actions.join(', ')} · <span className={a.voided ? 'muted' : 'ok-text'}>{a.voided ? `void (${a.voided.replaceAll('_', ' ')})` : 'approved'}</span>{' '}
-              {utc(Date.parse(a.approved_at)).slice(0, 5)} · by {a.approver.replace('operator:', '')}
+            <button key={a.request_id} className={`appr-done mono ${a === picked ? 'on' : ''}`} onClick={() => setSel(a.request_id)}>
+              {a.action} · <span className={a.decision?.outcome === 'approved' ? 'ok-text' : 'muted'}>{OUTCOME[a.decision?.outcome ?? 'approved']}</span>{' '}
+              {utc(Date.parse(a.decision?.at ?? a.requested_at)).slice(0, 5)} · by {(a.decision?.actor ?? '').replace('operator:', '')}
             </button>
           ))}
         </div>
         <div className="appr-detail">
-          {request && <Draft key={request.id} r={request} onApproved={() => setSel(request.id)} />}
-          {record && <Decided a={record} />}
-          {!request && !record && (
+          {picked?.state === 'pending' && <Draft key={picked.request_id} r={picked} onDecided={(id, text) => { setSel(id); setReceipt({ id, ok: true, text }) }} />}
+          {picked?.state === 'decided' && <Decided key={picked.request_id} r={picked} receipt={receipt?.id === picked.request_id ? receipt.text : undefined} />}
+          {!picked && (
             <div className="coming">
               <div className="coming-icon">◇</div>
               <h2>Nothing to approve</h2>
@@ -173,29 +176,27 @@ function Header({ title, threadId, extra }: { title: string; threadId: string; e
   )
 }
 
-// Evidence shows the thread's check words and audit status, separately from the approval.
+// Evidence shows the check words and audit status of the thread view, separately from the approval.
 function Evidence({ threadId }: { threadId: string }) {
-  const live = useLive()
-  const t = live.threads.get(threadId)
-  const checks = [...(t?.checks ?? [])]
+  const { data } = useQuery({ queryKey: ['thread', threadId], queryFn: () => get<ThreadView>(`/v1/threads/${threadId}`), retry: false })
+  const checks = flatChecks(data)
   return (
     <div className="card">
       <h6 className="section flush">Evidence for this plan · shown separately from approval</h6>
       <div className="evidence">
-        {checks.length === 0 && !t?.audit && <span className="muted small">No checks recorded for this thread yet.</span>}
-        {checks.map(([name, c]) => (
+        {checks.length === 0 && !data?.audit_status && <span className="muted small">No checks recorded for this thread yet.</span>}
+        {checks.map(([name, status]) => (
           <span key={name} className="ev">
             <span className="mono">{name}</span>
-            <span className={`pill ${CHECKS[c.status]?.tone ?? ''}`}>
-              {CHECKS[c.status]?.icon} {CHECKS[c.status]?.label ?? c.status}
+            <span className={`pill ${CHECKS[status].tone}`}>
+              {CHECKS[status].icon} {CHECKS[status].label}
             </span>
-            {c.reason && <span className="muted small">{c.reason}</span>}
           </span>
         ))}
-        {t?.audit && (
+        {data?.audit_status && (
           <span className="ev">
             <span className="mono">audit</span>
-            <AuditPill status={t.audit} />
+            <AuditPill status={data.audit_status} />
           </span>
         )}
       </div>
@@ -204,18 +205,18 @@ function Evidence({ threadId }: { threadId: string }) {
 }
 
 // Draft is the pending request: the approval the operator is about to give, with Approve exactly this.
-function Draft({ r, onApproved }: { r: ApprovalRequest; onApproved: () => void }) {
+function Draft({ r, onDecided }: { r: ApprovalItem; onDecided: (requestId: string, receipt: string) => void }) {
   const qc = useQueryClient()
   const now = useNow()
-  const live = useLive()
-  const thread = useQuery({ queryKey: ['thread', r.threadId], queryFn: () => get<ThreadView>(`/v1/threads/${r.threadId}`), retry: false })
+  const thread = useQuery({ queryKey: ['thread', r.thread_id], queryFn: () => get<ThreadView>(`/v1/threads/${r.thread_id}`), retry: false })
+  const [reason, setReason] = useState('')
   const [minutes, setMinutes] = useState(15)
   const [rollback, setRollback] = useState('')
   const [irreversible, setIrreversible] = useState('')
   const [typedWorktree, setTypedWorktree] = useState('')
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null)
   const operational = OPERATIONAL.includes(r.action)
-  const plan = live.planDigests.get(r.threadId) ?? thread.data?.plan_digest
+  const plan = r.plan_digest || thread.data?.plan_digest
   const revision = operational ? undefined : thread.data?.revision
   // The expiry counts from when the operator opened this request, so the countdown shown is the one sent.
   const [opened] = useState(Date.now())
@@ -229,7 +230,7 @@ function Draft({ r, onApproved }: { r: ApprovalRequest; onApproved: () => void }
       if (operational && (!rollback.trim() || !plan)) throw new Error('This action must bind the plan digest and state a rollback.')
       const body: Record<string, unknown> = {
         worktree_digest: worktree,
-        target: r.target || r.machine,
+        target: r.target ?? '',
         actions: [r.action],
         expires_at: new Date(expires).toISOString(),
         ...(revision ? { revision } : { plan_digest: plan }),
@@ -240,20 +241,40 @@ function Draft({ r, onApproved }: { r: ApprovalRequest; onApproved: () => void }
           .split('\n')
           .map((l) => l.trim())
           .filter(Boolean)
-      return command(`/v1/threads/${r.threadId}/approvals`, body)
+      return command(`/v1/threads/${r.thread_id}/approvals`, body)
     },
-    onSuccess: (c) => {
-      onApproved()
-      setResult({ ok: true, text: `approval accepted${c.receipt.result?.approval_id ? ' (' + c.receipt.result.approval_id + ')' : ''} · receipt ${c.receipt.receipt_id} · request ${c.requestId}${c.replayed ? ' (replayed)' : ''}` })
-      void qc.invalidateQueries({ queryKey: ['threads'] })
-    },
-    onError: (e: Error) => setResult({ ok: false, text: e instanceof ApiError ? `${e.code}: ${e.message}` : e.message }),
+    onSuccess: (c) => done(c, `approval accepted${c.receipt.result?.approval_id ? ' (' + c.receipt.result.approval_id + ')' : ''}`),
+    onError: fail,
   })
+  // decline records approval.declined through reject or request-changes; the request then moves to Recently decided.
+  const decline = useMutation({
+    mutationFn: (kind: 'reject' | 'request-changes'): Promise<CommandResult> => {
+      if (!reason.trim()) throw new Error('Give a reason first: it is recorded with your decision.')
+      return command(`/v1/approvals/${r.request_id}/${kind}`, { reason: reason.trim() })
+    },
+    onSuccess: (c, kind) => done(c, kind === 'reject' ? 'rejected' : 'changes requested'),
+    onError: fail,
+  })
+
+  // done shows the receipt and refreshes every list the decision changes.
+  function done(c: CommandResult, what: string) {
+    const text = `${what} · receipt ${c.receipt.receipt_id} · request ${c.requestId}${c.replayed ? ' (replayed)' : ''}`
+    setResult({ ok: true, text })
+    onDecided(r.request_id, text)
+    void qc.invalidateQueries({ queryKey: ['approvals'] })
+    void qc.invalidateQueries({ queryKey: ['threads'] })
+    void qc.invalidateQueries({ queryKey: ['thread'] })
+  }
+  // fail shows the problem code and message of a refused call.
+  function fail(e: Error) {
+    setResult({ ok: false, text: e instanceof ApiError ? `${e.code}: ${e.message}` : e.message })
+  }
+  const busy = approve.isPending || decline.isPending
 
   return (
     <>
-      <Header title={r.action} threadId={r.threadId} extra={r.status === 'approved' ? <span className="pill green">Approved</span> : <span className="pill amber">Approval needed</span>} />
-      <Fields target={r.target || r.machine} revision={revision} plan={plan} worktree={thread.data?.worktree_digest} onWorktree={thread.isSuccess ? setTypedWorktree : undefined} actions={[r.action]} expires={expires} operational={operational} />
+      <Header title={r.action} threadId={r.thread_id} extra={<span className="pill amber">Approval needed</span>} />
+      <Fields target={r.target ?? ''} revision={revision} plan={plan} worktree={thread.data?.worktree_digest} onWorktree={thread.isSuccess ? setTypedWorktree : undefined} actions={[r.action]} expires={expires} operational={operational} />
       <div className="two">
         <div className="card">
           <h6 className="section flush">↺ Rollback{operational ? ' (required)' : ''}</h6>
@@ -264,15 +285,19 @@ function Draft({ r, onApproved }: { r: ApprovalRequest; onApproved: () => void }
           <textarea rows={3} value={irreversible} onChange={(e) => setIrreversible(e.target.value)} placeholder="External effects rollback cannot undo. Leave empty to state there are none." />
         </div>
       </div>
-      <Evidence threadId={r.threadId} />
+      <Evidence threadId={r.thread_id} />
+      <div className="card">
+        <h6 className="section flush">Reason for rejecting or asking for changes</h6>
+        <textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Required for Reject and Ask for changes; recorded with your decision" />
+      </div>
       <div className="actions appr-actions">
-        <button className="btn primary big" disabled={approve.isPending || expires <= now || r.status !== 'pending'} onClick={() => approve.mutate()}>
+        <button className="btn primary big" disabled={busy || expires <= now} onClick={() => approve.mutate()}>
           Approve exactly this
         </button>
-        <button className="btn danger big" disabled title="The API has no reject-approval endpoint yet (open question)">
+        <button className="btn danger big" disabled={busy || !reason.trim()} onClick={() => decline.mutate('reject')}>
           Reject
         </button>
-        <button className="btn big" disabled title="The API has no request-changes endpoint yet (open question)">
+        <button className="btn big" disabled={busy || !reason.trim()} onClick={() => decline.mutate('request-changes')}>
           Ask for changes
         </button>
         <label className="inline small">
@@ -286,34 +311,43 @@ function Draft({ r, onApproved }: { r: ApprovalRequest; onApproved: () => void }
   )
 }
 
-// Decided shows a recorded approval read-only, with its void reason if it was voided.
-function Decided({ a }: { a: ApprovalRecord }) {
+// Decided shows a decided request read-only: its outcome, who decided, when, and the reason.
+function Decided({ r, receipt }: { r: ApprovalItem; receipt?: string }) {
+  const d = r.decision
+  const outcome = OUTCOME[d?.outcome ?? 'approved']
   return (
     <>
-      <Header title={a.actions.join(', ')} threadId={a.thread} extra={<span className={`pill ${a.voided ? '' : 'green'}`}>{a.voided ? `Void · ${a.voided.replaceAll('_', ' ')}` : 'Approved'}</span>} />
-      <Fields target={a.target} revision={a.revision} plan={a.plan_digest} worktree={a.worktree_digest} actions={a.actions} expires={a.voided ? 0 : Date.parse(a.expires_at)} operational={OPERATIONAL.some((x) => a.actions.includes(x))} />
-      <div className="two">
-        <div className="card">
-          <h6 className="section flush">↺ Rollback</h6>
-          <p className="small">{a.rollback ? <code>{a.rollback}</code> : <span className="muted">none stated</span>}</p>
-        </div>
-        <div className="card danger-card">
-          <h6 className="section flush">△ Irreversible effects</h6>
-          {(a.irreversible_effects ?? []).length ? (
-            <ul>
-              {a.irreversible_effects?.map((x) => (
-                <li key={x}>{x}</li>
-              ))}
-            </ul>
-          ) : (
-            <p className="small muted">none stated</p>
-          )}
-        </div>
+      <Header title={r.action} threadId={r.thread_id} extra={<span className={`pill ${d?.outcome === 'approved' ? 'green' : 'amber'}`}>{cap(outcome)}</span>} />
+      <div className="card kvs">
+        <Line k="Target">
+          <span className="mono">{r.target || '—'}</span>
+        </Line>
+        <Line k="Plan digest">{r.plan_digest ? <span className="mono">{short(r.plan_digest)}</span> : <span className="muted mono">none recorded</span>}</Line>
+        <Line k="Rule">
+          <span className="mono">{r.rule_id ?? '—'}</span>
+        </Line>
+        <Line k="Requested">
+          <span className="mono">{r.requested_at}</span>
+        </Line>
+        <Line k="Decision">
+          <b>{outcome}</b>{' '}
+          <span className="mono muted small">
+            by {d?.actor} at {d?.at}
+          </span>
+        </Line>
+        {d?.reason && (
+          <Line k="Reason">
+            <span>{d.reason}</span>
+          </Line>
+        )}
+        {d?.approval_id && (
+          <Line k="Approval">
+            <span className="mono">{d.approval_id}</span>
+          </Line>
+        )}
       </div>
-      <Evidence threadId={a.thread} />
-      <p className="muted small">
-        Approved by <span className="mono">{a.approver}</span> at <span className="mono">{a.approved_at}</span>.
-      </p>
+      <Evidence threadId={r.thread_id} />
+      {receipt && <p className="receipt mono">{receipt}</p>}
     </>
   )
 }

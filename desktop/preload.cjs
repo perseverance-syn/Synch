@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('synch', {
   request: (req) => ipcRenderer.invoke('api:request', req),
   openStream: (stream, after) => ipcRenderer.invoke('stream:open', { stream, after }),
   closeStream: (handle) => ipcRenderer.invoke('stream:close', handle),
+  saveEvidence: (threadId) => ipcRenderer.invoke('evidence:save', threadId),
   onFrame: (cb) => {
     const listener = (_e, frame) => cb(frame)
     ipcRenderer.on('stream:frame', listener)

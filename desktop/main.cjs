@@ -2,7 +2,7 @@
 // The renderer never sees the token; it asks this process to make API calls and to follow SSE streams
 // over IPC. This also avoids CORS, since the daemon serves loopback clients, not browser origins.
 // Closing the window only quits the desktop; the daemon is a separate process and keeps running.
-const { app, BrowserWindow, ipcMain, safeStorage } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, safeStorage } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
 
@@ -168,6 +168,26 @@ function closeStream(_e, handle) {
   streams.delete(handle)
 }
 
+// --- Evidence export: the zip is fetched and written here, so the renderer never touches files ---
+
+// saveEvidence downloads GET /v1/threads/{id}/evidence and writes it where the operator chooses.
+async function saveEvidence(e, threadId) {
+  if (!/^[0-9A-HJKMNP-TV-Z]{26}$/.test(String(threadId))) return { saved: false, error: 'invalid thread id' }
+  const { url, token } = await connection()
+  try {
+    const res = await fetch(`${url}/v1/threads/${threadId}/evidence`, { headers: { Authorization: `Bearer ${token}` }, redirect: 'error', signal: AbortSignal.timeout(60000) })
+    if (res.status !== 200) return { saved: false, error: `HTTP ${res.status}` }
+    const buf = Buffer.from(await res.arrayBuffer())
+    const win = BrowserWindow.fromWebContents(e.sender)
+    const pick = await dialog.showSaveDialog(win, { defaultPath: `evidence-${threadId}.zip`, filters: [{ name: 'Evidence bundle', extensions: ['zip'] }] })
+    if (pick.canceled || !pick.filePath) return { saved: false }
+    fs.writeFileSync(pick.filePath, buf)
+    return { saved: true, path: pick.filePath, bytes: buf.length, digest: res.headers.get('Synch-Manifest-Digest') || undefined }
+  } catch (err) {
+    return { saved: false, error: String(err && err.cause ? err.cause.code || err.cause.message : err) }
+  }
+}
+
 // --- Window ---
 
 // openWindow creates the locked-down window and loads the Vite build from disk.
@@ -202,6 +222,7 @@ ipcMain.handle('app:version', () => `${app.getVersion()} (Electron ${process.ver
 ipcMain.handle('api:request', apiRequest)
 ipcMain.handle('stream:open', openStream)
 ipcMain.handle('stream:close', closeStream)
+ipcMain.handle('evidence:save', saveEvidence)
 
 app.whenReady().then(openWindow)
 app.on('activate', () => {

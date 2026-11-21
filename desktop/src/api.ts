@@ -21,6 +21,7 @@ type Bridge = {
   request(req: { method: string; path: string; body?: unknown; requestId?: string }): Promise<RawResponse>
   openStream(stream: string, after: number): Promise<number>
   closeStream(handle: number): Promise<void>
+  saveEvidence(threadId: string): Promise<{ saved: boolean; path?: string; bytes?: number; digest?: string; error?: string }>
   onFrame(cb: (frame: StreamFrame) => void): () => void
 }
 
@@ -121,8 +122,48 @@ export type ThreadView = {
   execution?: 'direct' | 'remote' | 'sandbox'
   audit_status?: string
   waiting_for?: string
+  checks?: Record<'passed' | 'failed' | 'error' | 'partial' | 'not_run', string[]>
+  open_requirements?: { kind: 'check' | 'decision'; id: string; status?: string }[]
   last_seq: number
 }
+
+/** ApprovalItem is one request from GET /v1/approvals; request_id is the policy.decided event id. */
+export type ApprovalItem = {
+  request_id: string
+  thread_id: string
+  state: 'pending' | 'decided'
+  action: string
+  target?: string
+  plan_digest?: string
+  rule_id?: string
+  requested_at: string
+  decision?: { outcome: 'approved' | 'rejected' | 'changes_requested'; actor: string; at: string; reason?: string; approval_id?: string }
+}
+
+/** FindingGroup is one finding group from GET /v1/findings. */
+export type FindingGroup = {
+  key: string
+  fingerprint?: string
+  source: 'scanner' | 'audit' | 'security_review'
+  tool: string
+  rule?: string
+  location?: string
+  summary?: string
+  severity: string
+  status: 'open' | 'confirmed' | 'fixed' | 'false_positive' | 'accepted_risk'
+  threads: string[]
+  finding_ids: string[]
+  provenance: Record<string, unknown>[]
+  occurrences: number
+  first_seen: string
+  last_seen: string
+}
+
+/** Diff is GET /v1/threads/{id}/diff: a capped patch plus the reference of the retained full diff. */
+export type Diff = { base: string; revision: string; patch: string; truncated: boolean; bytes: number; digest: string; ref: string }
+
+/** ExecutionDriver is one entry of GET /v1/execution-drivers. */
+export type ExecutionDriver = { kind: string; description: string; status: string; evidence_integrity: string; certified_configs: string[] }
 
 /** Event is one persisted event envelope (events/catalogue.schema.json). */
 export type Event = {
